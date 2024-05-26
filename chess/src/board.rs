@@ -18,15 +18,14 @@ use crate::{
 
 use self::shifts::{down_left, down_right, up_left, up_right};
 
-pub(crate) struct ErgonomicBoard {
+#[derive(Debug)]
+pub struct ErgonomicBoard {
     pieces: [[Option<Piece>; 8]; 8],
 }
 
 impl ErgonomicBoard {
     fn new() -> Self {
-        Self {
-            pieces: from_fn(|_| from_fn(|_| None)),
-        }
+        Self { pieces: from_fn(|_| from_fn(|_| None)) }
     }
 }
 
@@ -45,7 +44,7 @@ impl IndexMut<Location> for ErgonomicBoard {
 }
 
 #[derive(Debug)]
-pub(crate) struct Board {
+pub struct Board {
     starting_position: BoardLayout,
     pawns: [BitBoard; 2],
     knights: [BitBoard; 2],
@@ -394,7 +393,7 @@ impl Board {
         }
 
         if self.knights[black!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Knight, Player::White));
+            return Some(Piece::new(PieceKind::Knight, Player::Black));
         }
 
         if self.bishops[white!()].0 & location_bits != 0 {
@@ -425,15 +424,15 @@ impl Board {
         return None;
     }
 
-    fn into_ergo_board(&self) -> ErgonomicBoard {
+    pub fn into_ergo_board(&self) -> ErgonomicBoard {
         self.assert_board_integrity();
-        let mut result = ErgonomicBoard::new();
+        let mut result = ErgonomicBoard {
+            pieces: from_fn(|_| from_fn(|_| None))
+        };
 
         for rank in Rank::all_ranks_ascending() {
             for file in File::all_files_ascending() {
                 let location = Location::new(file, rank);
-                let location_bits = location.as_u64();
-
                 result[location] = self.at(location);
             }
         }
@@ -464,8 +463,8 @@ impl Display for Board {
                 match &ergo_board[location] {
                     None => result.push_str(" * "),
                     Some(piece) => {
-                        result.push(piece.player.as_char());
-                        result.push(piece.kind.as_char());
+                        result.push(piece.player().as_char());
+                        result.push(piece.kind().as_char());
                         result.push(' ');
                     }
                 }
@@ -512,16 +511,16 @@ impl<'board> LegalMovesIterator<'board> {
     fn for_piece(board: &'board Board, piece: Piece) -> Self {
         Self {
             board,
-            player: piece.player,
+            player: piece.player(),
             is_check: None,
             pawn_moves_iterator: Some(LegalPawnMovesIterator::new(board)),
             knight_moves_iterator: Some(LegalKnightMovesIterator { board }),
             bishop_moves_iterator: Some(LegalBishopMovesIterator { board }),
             rook_moves_iterator: Some(LegalRookMovesIterator { board }),
             queen_moves_iterator: Some(LegalQueenMovesIterator { board }),
-            king_moves_iterator: LegalKingMovesIterator::new(&board, piece.player),
+            king_moves_iterator: LegalKingMovesIterator::new(&board, piece.player()),
             // We only want to iterate through king moves if the target piece is a king
-            king_moves_iterator_finished: piece.kind != PieceKind::King,
+            king_moves_iterator_finished: piece.kind() != PieceKind::King,
             check_blocking_squares: None,
         }
     }
@@ -1158,7 +1157,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                 let moved_piece = self.board.at(last_move.to).expect("Board integrity issue: last recorded move describes a move to a square that now has no piece.");
 
                 if (last_move.to.rank().as_int() - last_move.from.rank().as_int()).abs() == 2 {
-                    if let PieceKind::Pawn = moved_piece.kind {
+                    if let PieceKind::Pawn = moved_piece.kind() {
                         let player_to_move = self.board.get_player_to_move().as_index();
 
                         let move_bits = last_move.to.as_u64();
@@ -1233,7 +1232,7 @@ enum LegalMovesGeneratorState {
 
 impl From<Piece> for LegalMovesGeneratorState {
     fn from(value: Piece) -> Self {
-        Self::from(value.kind)
+        Self::from(value.kind())
     }
 }
 

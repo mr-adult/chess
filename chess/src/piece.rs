@@ -2,17 +2,26 @@ use std::fmt::Debug;
 
 use chess_common::{PieceKind, Player};
 
-pub(crate) struct Piece {
-    pub(crate) kind: PieceKind,
-    pub(crate) player: Player,
+#[derive(Clone, Copy)]
+pub struct Piece {
+    kind: PieceKind,
+    player: Player,
 }
 
 impl Piece {
-    pub(crate) fn new(kind: PieceKind, player: Player) -> Self {
+    pub fn new(kind: PieceKind, player: Player) -> Self {
         Self {
             kind,
             player,
         }
+    }
+
+    pub fn kind(&self) -> PieceKind {
+         self.kind
+    }
+
+    pub fn player(&self) -> Player {
+        self.player
     }
 }
 
