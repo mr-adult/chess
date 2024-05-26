@@ -1,0 +1,486 @@
+use std::fmt::Debug;
+
+use chess_common::{File, Location, PieceKind, Rank};
+
+pub fn parse_algebraic_notation(move_: &str) -> Option<PieceMove> {
+    ACNParser::parse(move_)
+}
+
+#[derive(Debug)]
+pub enum PieceMove {
+    CastleKingside,
+    CastleQueenside,
+    Normal(NormalMove),
+}
+
+pub struct NormalMove {
+    /// The piece being moved
+    piece_kind: PieceKind,
+    /// The destination square of the move
+    destination: Location,
+    /// The file from which the piece is moving (only given if necessary for disambiguation)
+    disambiguation_file: Option<File>,
+    /// The rank from which the piece is moving (only given if necessary for disambiguation)
+    disambiguation_rank: Option<Rank>,
+    is_capture: bool,
+    /// The type of check this move resulted in
+    check_kind: Check,
+    /// None = no promotion
+    promotion_kind: Option<PieceKind>,
+    /// '?' and '!' annotations
+    move_suffix_annotations: [Option<SuffixAnnotation>; 2],
+}
+
+impl Debug for NormalMove {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut result = String::new();
+        result.push(self.piece_kind.as_char());
+        if result.as_bytes()[0] == b'P' {
+            result.pop();
+        }
+
+        if let Some(disambiguation_file) = self.disambiguation_file {
+            result.push(disambiguation_file.as_char());
+        }
+
+        if let Some(disambiguation_rank) = self.disambiguation_rank {
+            result.push(disambiguation_rank.as_char());
+        }
+
+        if self.is_capture {
+            result.push('x');
+        }
+
+        result.push(self.destination.file().as_char());
+        result.push(self.destination.rank().as_char());
+
+        if let Some(promotion_piece) = self.promotion_kind {
+            result.push('=');
+            result.push(promotion_piece.as_char());
+        }
+
+        match self.check_kind {
+            Check::None => {}
+            Check::Check => result.push('+'),
+            Check::Mate => result.push('#'),
+        }
+
+        write!(f, "{}", result)
+    }
+}
+
+#[derive(Debug)]
+enum SuffixAnnotation {
+    Exclamation,
+    Question,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum Check {
+    None,
+    Check,
+    Mate,
+}
+
+pub(crate) struct ACNParser;
+impl ACNParser {
+    /// This method is currently unsafe outside of the pgn parser
+    /// because it doesn't check the integrity of the string
+    /// contents.
+    fn parse(source: &str) -> Option<PieceMove> {
+        let trimmed = source.trim();
+        if trimmed == "O-O" {
+            return Some(PieceMove::CastleKingside);
+        }
+
+        if trimmed == "O-O-O" {
+            return Some(PieceMove::CastleQueenside);
+        }
+
+        let mut chars = trimmed.chars().peekable();
+        let piece_kind = match chars.peek()? {
+            'P' => {
+                // consume it!
+                chars.next();
+                PieceKind::Pawn
+            }
+            'N' => {
+                // consume it!
+                chars.next();
+                PieceKind::Knight
+            }
+            'B' => {
+                // consume it!
+                chars.next();
+                PieceKind::Bishop
+            }
+            'R' => {
+                // consume it!
+                chars.next();
+                PieceKind::Rook
+            }
+            'Q' => {
+                // consume it!
+                chars.next();
+                PieceKind::Queen
+            }
+            'K' => {
+                // consume it!
+                chars.next();
+                PieceKind::King
+            }
+            _ => PieceKind::Pawn,
+        };
+
+        let mut current_char = chars.next()?;
+
+        let mut files = Vec::<File>::with_capacity(2);
+        if let Ok(file) = current_char.try_into() {
+            files.push(file);
+            current_char = chars.next()?;
+        }
+
+        let mut ranks = Vec::<Rank>::with_capacity(2);
+        if let Ok(rank) = current_char.try_into() {
+            ranks.push(rank);
+            if let Some(ch) = chars.next() {
+                current_char = ch;
+            } else {
+                return Some(PieceMove::Normal(NormalMove {
+                    piece_kind,
+                    destination: Location::new(files.pop()?, ranks.pop()?),
+                    disambiguation_file: None, // if we ran out of characters this soon, there is not disambiguation.
+                    disambiguation_rank: None, // if we ran out of characters this soon, there is not disambiguation.
+                    check_kind: Check::None,
+                    is_capture: false,
+                    promotion_kind: None,
+                    move_suffix_annotations: [None, None],
+                }));
+            }
+        }
+
+        let is_capture = current_char == 'x';
+        if is_capture {
+            current_char = chars.next()?;
+        }
+
+        if let Ok(file) = current_char.try_into() {
+            files.push(file);
+            current_char = chars.next()?;
+        }
+
+        let mut check_kind = Check::None;
+        let mut promotion: Option<PieceKind> = None;
+        if let Ok(rank) = current_char.try_into() {
+            ranks.push(rank);
+            if let Some(_) = chars.peek() {
+                if let Some(ch) = chars.next() {
+                    current_char = ch;
+                } else {
+                    unreachable!();
+                }
+            }
+        }
+
+        if current_char == '=' {
+            promotion = Some(chars.next()?.try_into().ok()?);
+            if let Some(_) = chars.peek() {
+                if let Some(ch) = chars.next() {
+                    current_char = ch;
+                } else {
+                    unreachable!();
+                }
+            }
+        }
+
+        match current_char {
+            '+' => {
+                check_kind = Check::Check;
+                if let Some(_) = chars.peek() {
+                    if let Some(ch) = chars.next() {
+                        current_char = ch;
+                    } else {
+                        unreachable!();
+                    }
+                }
+            }
+            '#' => {
+                check_kind = Check::Mate;
+                if let Some(_) = chars.peek() {
+                    if let Some(ch) = chars.next() {
+                        current_char = ch;
+                    } else {
+                        unreachable!();
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        let mut annotations = [None, None];
+        for i in 0..2 {
+            if current_char == '?' || current_char == '!' {
+                annotations[i] = Some(match current_char {
+                    '?' => SuffixAnnotation::Question,
+                    '!' => SuffixAnnotation::Exclamation,
+                    _ => unreachable!(),
+                });
+
+                if let Some(_) = chars.peek() {
+                    if let Some(ch) = chars.next() {
+                        current_char = ch;
+                    } else {
+                        unreachable!();
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        return Some(PieceMove::Normal(NormalMove {
+            piece_kind,
+            destination: Location::new(files.pop()?, ranks.pop()?),
+            disambiguation_file: files.pop(),
+            disambiguation_rank: ranks.pop(),
+            is_capture,
+            check_kind,
+            promotion_kind: promotion,
+            move_suffix_annotations: annotations,
+        }));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chess_common::{File, Location, PieceKind, Rank};
+
+    use super::Check;
+    use super::{parse_algebraic_notation, PieceMove};
+
+    #[test]
+    fn parses_pawn_cases() {
+        let move_ = parse_algebraic_notation("f4").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Pawn);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::f, Rank::Four));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("c4").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Pawn);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::c, Rank::Four));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("cxd5").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Pawn);
+            assert!(move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file == Some(File::c));
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::d, Rank::Five));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("fxg1=Q+").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Pawn);
+            assert!(move_details.is_capture);
+            assert!(move_details.check_kind == Check::Check);
+            assert!(move_details.disambiguation_file == Some(File::f));
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::g, Rank::One));
+            assert!(move_details.promotion_kind == Some(PieceKind::Queen));
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+    }
+
+    #[test]
+    fn parses_knight_cases() {
+        let move_ = parse_algebraic_notation("Nf3").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Knight);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::f, Rank::Three));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("Nxe5").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Knight);
+            assert!(move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::e, Rank::Five));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+    }
+
+    #[test]
+    fn parses_bishop_cases() {
+        let move_ = parse_algebraic_notation("Bc4").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Bishop);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::c, Rank::Four));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("Bd2").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Bishop);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::d, Rank::Two));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("Bxb7").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Bishop);
+            assert!(move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::b, Rank::Seven));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+    }
+
+    #[test]
+    fn parses_rook_moves() {
+        let move_ = parse_algebraic_notation("Re3").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Rook);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::e, Rank::Three));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("Rxc5").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Rook);
+            assert!(move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::c, Rank::Five));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("Re5+").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Rook);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::Check);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::e, Rank::Five));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+    }
+
+    #[test]
+    fn parses_queen_moves() {
+        let move_ = parse_algebraic_notation("Qc5").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Queen);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::c, Rank::Five));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("Qa6xb7#").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::Queen);
+            assert!(move_details.is_capture);
+            assert!(move_details.check_kind == Check::Mate);
+            assert!(move_details.disambiguation_file == Some(File::a));
+            assert!(move_details.disambiguation_rank == Some(Rank::Six));
+            assert!(move_details.destination == Location::new(File::b, Rank::Seven));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+    }
+
+    #[test]
+    fn parses_king_moves() {
+        let move_ = parse_algebraic_notation("Kh3").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::King);
+            assert!(!move_details.is_capture);
+            assert!(move_details.check_kind == Check::None);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::h, Rank::Three));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+
+        let move_ = parse_algebraic_notation("Kxa1#").unwrap();
+        if let PieceMove::Normal(move_details) = move_ {
+            assert!(move_details.piece_kind == PieceKind::King);
+            assert!(move_details.is_capture);
+            assert!(move_details.check_kind == Check::Mate);
+            assert!(move_details.disambiguation_file.is_none());
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::a, Rank::One));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+    }
+}
