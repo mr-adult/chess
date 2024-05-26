@@ -4,10 +4,23 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use html_to_string_macro::html;
 use http::Method;
-use tower_http::cors::{Any, CorsLayer};
+use tower_cookies::CookieManagerLayer;
+use tower_http::{cors::{Any, CorsLayer}, services::ServeDir};
 
 use sqlx::{postgres::PgPoolOptions, PgPool};
+
+mod api;
+mod auth;
+mod chess_html;
+
+const TOKEN_EXPIRATION_TIME_SECS: usize = 1800; // 30 mins
+
+/// Making this a function so I can interject a .env file value later on.
+pub fn get_token_expiration_secs() -> usize {
+    TOKEN_EXPIRATION_TIME_SECS
+}
 
 #[tokio::main]
 async fn main() {
@@ -39,15 +52,22 @@ async fn main() {
 
     // Set up the routes for our application
     let app = Router::new()
-        .route("/", get(hello_world))
+        .route("/", get(home))
+        .route("/login", post(auth::login_handler))
+        .route_service("/api", api::create_api_router())
+        .nest_service("/styles", ServeDir::new("src/styles"))
+        .nest_service("/scripts", ServeDir::new("src/scripts"))
         .layer(
             // Add CORS so it doesn't block our requests from the browser
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST])
                 .allow_origin(Any),
         )
+        .layer(CookieManagerLayer::new())
         // Attach our connection pool to every endpoint so the endpoints can query the DB.
-        .with_state(pool);
+        .with_state(AppState {
+            pgpool: pool
+        });
 
     // Bind to port 8080
     let listener = tokio::net::TcpListener::bind("[::]:8080")
@@ -61,6 +81,22 @@ async fn main() {
         .unwrap_or_else(|err| panic!("Failed to start app. Error: \n{}", err));
 }
 
-async fn hello_world(state: State<PgPool>) -> Html<String> {
-    return Html("Hello, world!".to_string());
+#[derive(Clone)] // This will be cloned per-request, so no expensive to copy data should be introduced here.
+pub(crate) struct AppState {
+    pub(crate) pgpool: PgPool
+}
+
+async fn home(state: State<AppState>) -> Html<String> {
+    Html(html!{
+        <!DOCTYPE html>
+        <head>
+            <title>"Chess"</title>
+            <meta charset="UTF-8" />
+            <meta name="description" content="A chess website" />
+            <link rel="stylesheet" href="/styles/app.css" />
+        </head>
+        <body>
+            {chess_html::new_game().await.0}
+        </body>
+    })
 }
