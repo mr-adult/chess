@@ -1,0 +1,10 @@
+[package]
+name = "chess_parsers"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+chess_common = { path = "../common" }
+iso_8859_1_encoder = { path = "../encoder" }
