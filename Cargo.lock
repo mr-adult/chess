@@ -311,6 +311,10 @@ dependencies = [
 [[package]]
 name = "chess_common"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_derive",
+]
 
 [[package]]
 name = "chess_core"
@@ -320,6 +324,8 @@ dependencies = [
  "chess_parsers",
  "env_logger",
  "log",
+ "serde",
+ "serde_derive",
  "simpleml",
  "tree_iterators_rs",
 ]
