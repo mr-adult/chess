@@ -54,7 +54,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(home))
         .route("/login", post(auth::login_handler))
-        .route_service("/api", api::create_api_router())
+        .nest_service("/api", api::create_api_router())
         .nest_service("/styles", ServeDir::new("src/styles"))
         .nest_service("/scripts", ServeDir::new("src/scripts"))
         .layer(
@@ -94,6 +94,7 @@ async fn home(state: State<AppState>) -> Html<String> {
             <meta charset="UTF-8" />
             <meta name="description" content="A chess website" />
             <link rel="stylesheet" href="/styles/app.css" />
+            <script src="/scripts/app.js"></script>
         </head>
         <body>
             {chess_html::new_game().await.0}
