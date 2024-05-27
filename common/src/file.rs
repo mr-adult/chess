@@ -1,5 +1,7 @@
+use serde_derive::Serialize;
+
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum File {
     a = 0,
     b = 1,

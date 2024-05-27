@@ -5,17 +5,24 @@ pub enum Player {
 }
 
 impl Player {
-    pub fn as_char(self) -> char {
+    pub const fn as_char(self) -> char {
         match self {
-            Player::Black => 'B',
-            Player::White => 'W',
+            Player::Black => 'b',
+            Player::White => 'w',
         }
     }
 
-    pub fn as_index(&self) -> usize {
+    pub const fn as_index(&self) -> usize {
         match self {
             Player::White => 0,
             Player::Black => 1,
+        }
+    }
+
+    pub const fn other_player(&self) -> Player {
+        match self {
+            Player::White => Player::Black,
+            Player::Black => Player::Black,
         }
     }
 }

@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+use serde_derive::Serialize;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum Rank {
     One = 1,
     Two = 2,

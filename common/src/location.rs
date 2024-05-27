@@ -1,8 +1,7 @@
+use serde_derive::Serialize;
 use crate::{file::File, rank::Rank};
 
-
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct Location {
     pub(crate) file: File,
     pub(crate) rank: Rank,

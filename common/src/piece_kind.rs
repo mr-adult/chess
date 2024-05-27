@@ -9,7 +9,7 @@ pub enum PieceKind {
 }
 
 impl PieceKind {
-    pub fn as_char(self) -> char {
+    pub const fn as_char(self) -> char {
         match self {
             Self::Pawn => 'P',
             Self::Knight => 'N',
