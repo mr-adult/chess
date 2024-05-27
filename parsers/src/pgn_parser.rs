@@ -249,7 +249,7 @@ impl<'pgn> PgnParser<'pgn> {
                     }
                     _ => {}
                 }
-                
+
                 match parse_algebraic_notation(&symbol) {
                     None => Err(PgnErr::InvalidAlgebraicChessNotation(symbol))?,
                     Some(move_spec) => {

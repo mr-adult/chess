@@ -4,7 +4,7 @@ use std::ops::Index;
 use std::str::Chars;
 use std::{fmt::Debug, iter::Peekable};
 
-use chess_common::{File, Location, PieceKind, Player, Rank};
+use chess_common::{File, Location, PieceKind, Player, Rank, Piece};
 
 /// A struct that represents a string
 /// of valid FEN data
@@ -197,7 +197,7 @@ impl<'fen> FenParser<'fen> {
         })
     }
 
-    fn parse_piece_placement(&mut self) -> Result<[[Option<(Player, PieceKind)>; 8]; 8], FenErr> {
+    fn parse_piece_placement(&mut self) -> Result<[[Option<Piece>; 8]; 8], FenErr> {
         let mut result = [[None; 8]; 8];
         let mut num_to_skip = 0;
         for rank in (0..8).rev() {
@@ -220,18 +220,18 @@ impl<'fen> FenParser<'fen> {
 
                 let matched = self.match_char_if(|ch| {
                     match ch {
-                        'p' => result[rank][file] = Some((Player::Black, PieceKind::Pawn)),
-                        'P' => result[rank][file] = Some((Player::White, PieceKind::Pawn)),
-                        'n' => result[rank][file] = Some((Player::Black, PieceKind::Knight)),
-                        'N' => result[rank][file] = Some((Player::White, PieceKind::Knight)),
-                        'b' => result[rank][file] = Some((Player::Black, PieceKind::Bishop)),
-                        'B' => result[rank][file] = Some((Player::White, PieceKind::Bishop)),
-                        'r' => result[rank][file] = Some((Player::Black, PieceKind::Rook)),
-                        'R' => result[rank][file] = Some((Player::White, PieceKind::Rook)),
-                        'q' => result[rank][file] = Some((Player::Black, PieceKind::Queen)),
-                        'Q' => result[rank][file] = Some((Player::White, PieceKind::Queen)),
-                        'k' => result[rank][file] = Some((Player::Black, PieceKind::King)),
-                        'K' => result[rank][file] = Some((Player::White, PieceKind::King)),
+                        'p' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Pawn)),
+                        'P' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Pawn)),
+                        'n' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Knight)),
+                        'N' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Knight)),
+                        'b' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Bishop)),
+                        'B' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Bishop)),
+                        'r' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Rook)),
+                        'R' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Rook)),
+                        'q' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Queen)),
+                        'Q' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Queen)),
+                        'k' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::King)),
+                        'K' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::King)),
                         '1'..='8' => {
                             num_to_skip = ch as u32 - 0x31_u32; // 0x31 is '1'
                         }
@@ -292,7 +292,7 @@ impl<'fen> FenParser<'fen> {
 
 #[derive(Debug)]
 pub struct BoardLayout {
-    placement: [[Option<(Player, PieceKind)>; 8]; 8],
+    placement: [[Option<Piece>; 8]; 8],
     player_to_move: Player,
     white_can_castle_kingside: bool,
     white_can_castle_queenside: bool,
@@ -304,7 +304,7 @@ pub struct BoardLayout {
 }
 
 impl BoardLayout {
-    pub fn player_to_move(&self) -> Player {
+    pub const fn player_to_move(&self) -> Player {
         self.player_to_move
     }
 
@@ -328,11 +328,11 @@ impl BoardLayout {
         self.en_passant
     }
 
-    pub fn half_move_counter(&self) -> u8 {
+    pub const fn half_move_counter(&self) -> u8 {
         self.half_move_counter
     }
 
-    pub fn full_move_counter(&self) -> u8 {
+    pub const fn full_move_counter(&self) -> u8 {
         self.full_move_counter
     }
 
@@ -348,17 +348,17 @@ impl BoardLayout {
             for file in File::all_files_ascending() {
                 match self[Location::new(file, rank)] {
                     None => num_empties += 1,
-                    Some((player, piece_kind)) => {
+                    Some(piece) => {
                         if num_empties > 0 {
                             fen.push(num_empties + b'0');
                             num_empties = 0;
                         }
-                        match player {
+                        match piece.player() {
                             Player::White => {
-                                fen.push(piece_kind.as_char().to_ascii_uppercase() as u8)
+                                fen.push(piece.kind().as_char().to_ascii_uppercase() as u8)
                             }
                             Player::Black => {
-                                fen.push(piece_kind.as_char().to_ascii_lowercase() as u8)
+                                fen.push(piece.kind().as_char().to_ascii_lowercase() as u8)
                             }
                         }
                     }
@@ -371,7 +371,7 @@ impl BoardLayout {
         }
 
         fen.push(b' ');
-        fen.push(self.player_to_move().as_char().to_ascii_lowercase() as u8);
+        fen.push(self.player_to_move().as_char() as u8);
         fen.push(b' ');
         if self.white_can_castle_kingside() {
             fen.push(b'K');
@@ -410,7 +410,7 @@ impl BoardLayout {
 }
 
 impl Index<Location> for BoardLayout {
-    type Output = Option<(Player, PieceKind)>;
+    type Output = Option<Piece>;
 
     fn index(&self, index: Location) -> &Self::Output {
         &self.placement[index.rank().as_index()][index.file().as_index()]
@@ -419,7 +419,7 @@ impl Index<Location> for BoardLayout {
 
 #[cfg(test)]
 mod tests {
-    use chess_common::{File, Location, PieceKind, Player, Rank};
+    use chess_common::{File, Location, Piece, PieceKind, Player, Rank};
 
     use crate::parse_fen;
 
@@ -430,69 +430,69 @@ mod tests {
 
         // Rooks
         assert!(
-            layout[Location::new(File::a, Rank::One)] == Some((Player::White, PieceKind::Rook))
+            layout[Location::new(File::a, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::h, Rank::One)] == Some((Player::White, PieceKind::Rook))
+            layout[Location::new(File::h, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::a, Rank::Eight)] == Some((Player::Black, PieceKind::Rook))
+            layout[Location::new(File::a, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::h, Rank::Eight)] == Some((Player::Black, PieceKind::Rook))
+            layout[Location::new(File::h, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Rook))
         );
 
         // Knights
         assert!(
-            layout[Location::new(File::b, Rank::One)] == Some((Player::White, PieceKind::Knight))
+            layout[Location::new(File::b, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::g, Rank::One)] == Some((Player::White, PieceKind::Knight))
+            layout[Location::new(File::g, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::b, Rank::Eight)] == Some((Player::Black, PieceKind::Knight))
+            layout[Location::new(File::b, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::g, Rank::Eight)] == Some((Player::Black, PieceKind::Knight))
+            layout[Location::new(File::g, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Knight))
         );
 
         // Bishops
         assert!(
-            layout[Location::new(File::c, Rank::One)] == Some((Player::White, PieceKind::Bishop))
+            layout[Location::new(File::c, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::f, Rank::One)] == Some((Player::White, PieceKind::Bishop))
+            layout[Location::new(File::f, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::c, Rank::Eight)] == Some((Player::Black, PieceKind::Bishop))
+            layout[Location::new(File::c, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::f, Rank::Eight)] == Some((Player::Black, PieceKind::Bishop))
+            layout[Location::new(File::f, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Bishop))
         );
 
         // Queens
         assert!(
-            layout[Location::new(File::d, Rank::One)] == Some((Player::White, PieceKind::Queen))
+            layout[Location::new(File::d, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Queen))
         );
         assert!(
-            layout[Location::new(File::d, Rank::Eight)] == Some((Player::Black, PieceKind::Queen))
+            layout[Location::new(File::d, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Queen))
         );
 
         // Kings
         assert!(
-            layout[Location::new(File::e, Rank::One)] == Some((Player::White, PieceKind::King))
+            layout[Location::new(File::e, Rank::One)] == Some(Piece::new(Player::White, PieceKind::King))
         );
         assert!(
-            layout[Location::new(File::e, Rank::Eight)] == Some((Player::Black, PieceKind::King))
+            layout[Location::new(File::e, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::King))
         );
 
         // Pawns
         for file in File::all_files_ascending() {
             assert!(
-                layout[Location::new(file, Rank::Two)] == Some((Player::White, PieceKind::Pawn))
+                layout[Location::new(file, Rank::Two)] == Some(Piece::new(Player::White, PieceKind::Pawn))
             );
             assert!(
-                layout[Location::new(file, Rank::Seven)] == Some((Player::Black, PieceKind::Pawn))
+                layout[Location::new(file, Rank::Seven)] == Some(Piece::new(Player::Black, PieceKind::Pawn))
             );
         }
 
