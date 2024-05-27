@@ -1,9 +1,10 @@
 use std::str::FromStr;
 
-use chess_common::{Location, PieceKind, Player};
+use chess_common::Location;
+use serde_derive::Serialize;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct Move {
+pub struct Move {
     pub(crate) from: Location,
     pub(crate) to: Location,
 }

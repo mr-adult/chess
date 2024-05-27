@@ -1,4 +1,5 @@
 use std::{
+    any,
     array::{from_fn, IntoIter},
     fmt::Display,
     iter,
@@ -6,13 +7,12 @@ use std::{
     str::FromStr,
 };
 
-use chess_common::{black, white, File, Location, PieceKind, Player, Rank};
+use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{parse_fen, BoardLayout, FenErr};
 
 use crate::{
     bitboard::BitBoard,
     chess_move::{IllegalMove, KingMoveKind, MoveKind, PawnMoveKind},
-    piece::Piece,
     Move,
 };
 
@@ -25,7 +25,9 @@ pub struct ErgonomicBoard {
 
 impl ErgonomicBoard {
     fn new() -> Self {
-        Self { pieces: from_fn(|_| from_fn(|_| None)) }
+        Self {
+            pieces: from_fn(|_| from_fn(|_| None)),
+        }
     }
 }
 
@@ -84,62 +86,145 @@ impl FromStr for Board {
 
                 match result.starting_position[location] {
                     None => continue,
-                    Some((player, piece_kind)) => match piece_kind {
-                        PieceKind::Pawn => match player {
-                            Player::White => {
-                                result.pawns[white!()].0 |= location_u64;
-                            }
-                            Player::Black => {
-                                result.pawns[black!()].0 |= location_u64;
-                            }
-                        },
-                        PieceKind::Knight => match player {
-                            Player::White => {
-                                result.knights[white!()].0 |= location_u64;
-                            }
-                            Player::Black => {
-                                result.knights[black!()].0 |= location_u64;
-                            }
-                        },
-                        PieceKind::Bishop => match player {
-                            Player::White => {
-                                result.bishops[white!()].0 |= location_u64;
-                            }
-                            Player::Black => {
-                                result.bishops[black!()].0 |= location_u64;
-                            }
-                        },
-                        PieceKind::Rook => match player {
-                            Player::White => {
-                                result.rooks[white!()].0 |= location_u64;
-                            }
-                            Player::Black => {
-                                result.rooks[black!()].0 |= location_u64;
-                            }
-                        },
-                        PieceKind::Queen => match player {
-                            Player::White => {
-                                result.queens[white!()].0 |= location_u64;
-                            }
-                            Player::Black => {
-                                result.queens[black!()].0 |= location_u64;
-                            }
-                        },
-                        PieceKind::King => match player {
-                            Player::White => {
-                                result.kings[white!()].0 |= location_u64;
-                            }
-                            Player::Black => {
-                                result.kings[black!()].0 |= location_u64;
-                            }
-                        },
-                    },
+                    Some(piece) => {
+                        let piece_kind = piece.kind();
+                        let player = piece.player();
+
+                        match piece_kind {
+                            PieceKind::Pawn => match player {
+                                Player::White => {
+                                    result.pawns[white!()].0 |= location_u64;
+                                }
+                                Player::Black => {
+                                    result.pawns[black!()].0 |= location_u64;
+                                }
+                            },
+                            PieceKind::Knight => match player {
+                                Player::White => {
+                                    result.knights[white!()].0 |= location_u64;
+                                }
+                                Player::Black => {
+                                    result.knights[black!()].0 |= location_u64;
+                                }
+                            },
+                            PieceKind::Bishop => match player {
+                                Player::White => {
+                                    result.bishops[white!()].0 |= location_u64;
+                                }
+                                Player::Black => {
+                                    result.bishops[black!()].0 |= location_u64;
+                                }
+                            },
+                            PieceKind::Rook => match player {
+                                Player::White => {
+                                    result.rooks[white!()].0 |= location_u64;
+                                }
+                                Player::Black => {
+                                    result.rooks[black!()].0 |= location_u64;
+                                }
+                            },
+                            PieceKind::Queen => match player {
+                                Player::White => {
+                                    result.queens[white!()].0 |= location_u64;
+                                }
+                                Player::Black => {
+                                    result.queens[black!()].0 |= location_u64;
+                                }
+                            },
+                            PieceKind::King => match player {
+                                Player::White => {
+                                    result.kings[white!()].0 |= location_u64;
+                                }
+                                Player::Black => {
+                                    result.kings[black!()].0 |= location_u64;
+                                }
+                            },
+                        }
+                    }
                 }
             }
         }
 
         result.update_mailbox();
         Ok(result)
+    }
+}
+
+impl ToString for Board {
+    fn to_string(&self) -> String {
+        self.assert_board_integrity();
+
+        // FEN notation can only be 84 bytes max
+        let mut result = String::with_capacity(84);
+        for (rank_num, rank) in Rank::all_ranks_ascending().enumerate() {
+            if rank_num != 0 {
+                result.push('/');
+            }
+
+            let mut empty_spaces = 0;
+            for file in File::all_files_ascending().rev() {
+                match self.at(Location::new(file, rank)) {
+                    None => empty_spaces += 1,
+                    Some(piece) => {
+                        if empty_spaces > 0 {
+                            result.push_str(&empty_spaces.to_string());
+                            empty_spaces = 0;
+                        }
+
+                        result.push(piece.to_fen());
+                    }
+                }
+            }
+            if empty_spaces > 0 {
+                result.push_str(&empty_spaces.to_string());
+            }
+        }
+
+        result.push(' ');
+        let starting_player = self.starting_position.player_to_move();
+        if self.history.len() % 2 == 0 {
+            result.push(starting_player.as_char());
+        } else {
+            result.push(starting_player.other_player().as_char());
+        }
+
+        result.push(' ');
+        let mut any_castling_allowed = false;
+        if self.white_can_castle_kingside() {
+            any_castling_allowed = true;
+            result.push('K');
+        }
+        if self.white_can_castle_queenside() {
+            any_castling_allowed = true;
+            result.push('Q');
+        }
+        if self.black_can_castle_kingside() {
+            any_castling_allowed = true;
+            result.push('k');
+        }
+        if self.black_can_castle_queenside() {
+            any_castling_allowed = true;
+            result.push('q');
+        }
+        if !any_castling_allowed {
+            result.push('-')
+        }
+
+        result.push(' ');
+        if let Some(location) = self.en_passant_target_square() {
+            result.push(location.file().as_char());
+            result.push(location.rank().as_char());
+        } else {
+            result.push('-');
+        }
+
+        result.push(' ');
+        result.push_str(&self.half_moves_played().to_string());
+
+        result.push(' ');
+        result.push_str(&self.full_moves_played().to_string());
+
+        result
     }
 }
 
@@ -217,6 +302,88 @@ impl Board {
         }
 
         todo!()
+    }
+
+    fn white_can_castle_kingside(&self) -> bool {
+        if !self.starting_position.white_can_castle_kingside() {
+            return false;
+        }
+
+        return !self.history.iter().any(|move_| {
+            move_.from == Location::new(File::e, Rank::One)
+                || move_.from == Location::new(File::h, Rank::One)
+        });
+    }
+
+    fn black_can_castle_kingside(&self) -> bool {
+        if !self.starting_position.black_can_castle_kingside() {
+            return false;
+        }
+
+        return !self.history.iter().any(|move_| {
+            move_.from == Location::new(File::e, Rank::Eight)
+                || move_.from == Location::new(File::h, Rank::Eight)
+        });
+    }
+
+    fn white_can_castle_queenside(&self) -> bool {
+        if !self.starting_position.white_can_castle_queenside() {
+            return false;
+        }
+
+        return !self.history.iter().any(|move_| {
+            move_.from == Location::new(File::e, Rank::One)
+                || move_.from == Location::new(File::a, Rank::One)
+        });
+    }
+
+    fn black_can_castle_queenside(&self) -> bool {
+        if !self.starting_position.black_can_castle_queenside() {
+            return false;
+        }
+
+        return !self.history.iter().any(|move_| {
+            move_.from == Location::new(File::e, Rank::Eight)
+                || move_.from == Location::new(File::a, Rank::Eight)
+        });
+    }
+
+    fn half_moves_played(&self) -> u8 {
+        self.starting_position.half_move_counter() + self.history.len() as u8
+    }
+
+    fn full_moves_played(&self) -> u8 {
+        let history_len_u8 = self.history.len() as u8;
+        match self.starting_position.player_to_move() {
+            Player::White => self.starting_position.full_move_counter() + history_len_u8 / 2,
+            Player::Black => {
+                self.starting_position.full_move_counter() + history_len_u8 / 2 + history_len_u8 % 2
+            }
+        }
+    }
+
+    fn en_passant_target_square(&self) -> Option<Location> {
+        if let Some(last_move) = self.history.last() {
+            if let Some(last_moved) = self.at(last_move.to) {
+                if let PieceKind::Pawn = last_moved.kind() {
+                    // It may not be necessary to check the files, but it is safer.
+                    if last_move.to.file() == last_move.from.file()
+                        && last_move.to.rank().as_int() - last_move.from.rank().as_int() == 2
+                    {
+                        let file = last_move.to.file();
+                        let rank = last_move.from.rank().as_int() + last_move.to.rank().as_int()
+                            - last_move.from.rank().as_int();
+                        let rank = Rank::try_from(rank)
+                            .expect("Integrity issue: as_int() should always be re-parsable");
+                        return Some(Location::new(file, rank));
+                    }
+                }
+            }
+        } else if let Some(location) = self.starting_position.en_passant_target_square() {
+            return Some(location);
+        }
+
+        return None;
     }
 
     fn make_move_unchecked(&mut self, move_: Move) -> Result<(), IllegalMove> {
@@ -370,55 +537,55 @@ impl Board {
 
         // pawns are most common, so check them first
         if self.pawns[white!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Pawn, Player::White));
+            return Some(Piece::new(Player::White, PieceKind::Pawn));
         }
 
         if self.pawns[black!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Pawn, Player::Black));
+            return Some(Piece::new(Player::Black, PieceKind::Pawn));
         }
 
         // Rooks are equally as common as bishops and knights, but tend
         // to be more prevalent in the mid to end game, so check them
         // before bishops/knights
         if self.rooks[white!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Rook, Player::White));
+            return Some(Piece::new(Player::White, PieceKind::Rook));
         }
 
         if self.rooks[black!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Rook, Player::Black));
+            return Some(Piece::new(Player::Black, PieceKind::Rook));
         }
 
         if self.knights[white!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Knight, Player::White));
+            return Some(Piece::new(Player::White, PieceKind::Knight));
         }
 
         if self.knights[black!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Knight, Player::Black));
+            return Some(Piece::new(Player::Black, PieceKind::Knight));
         }
 
         if self.bishops[white!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Bishop, Player::White));
+            return Some(Piece::new(Player::White, PieceKind::Bishop));
+        }
+
+        if self.bishops[black!()].0 & location_bits != 0 {
+            return Some(Piece::new(Player::Black, PieceKind::Bishop));
         }
 
         // Only 1 queen/king per side, so check them last
-        if self.bishops[black!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Bishop, Player::Black));
-        }
-
         if self.queens[white!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Queen, Player::White));
+            return Some(Piece::new(Player::White, PieceKind::Queen));
         }
 
         if self.queens[black!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::Queen, Player::Black));
+            return Some(Piece::new(Player::Black, PieceKind::Queen));
         }
 
         if self.kings[white!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::King, Player::White));
+            return Some(Piece::new(Player::White, PieceKind::King));
         }
 
         if self.kings[black!()].0 & location_bits != 0 {
-            return Some(Piece::new(PieceKind::King, Player::Black));
+            return Some(Piece::new(Player::Black, PieceKind::King));
         }
 
         return None;
@@ -427,7 +594,7 @@ impl Board {
     pub fn into_ergo_board(&self) -> ErgonomicBoard {
         self.assert_board_integrity();
         let mut result = ErgonomicBoard {
-            pieces: from_fn(|_| from_fn(|_| None))
+            pieces: from_fn(|_| from_fn(|_| None)),
         };
 
         for rank in Rank::all_ranks_ascending() {
@@ -440,39 +607,18 @@ impl Board {
         result
     }
 
-    fn legal_moves<'a>(&'a self) -> impl Iterator<Item = Move> + 'a {
+    pub fn legal_moves<'a>(&'a self) -> impl Iterator<Item = Move> + 'a {
         LegalMovesIterator::for_board(self)
+    }
+
+    fn legal_king_moves<'a>(&'a self) -> impl Iterator<Item = Move> + 'a {
+        LegalKingMovesIterator::new(self, self.get_player_to_move())
     }
 }
 
 impl Default for Board {
     fn default() -> Self {
         Self::from_str("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
-    }
-}
-
-impl Display for Board {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut result = String::new();
-        let ergo_board: ErgonomicBoard = self.into_ergo_board();
-
-        for rank in Rank::all_ranks_ascending().rev() {
-            for file in File::all_files_ascending() {
-                let location = Location::new(file, rank);
-
-                match &ergo_board[location] {
-                    None => result.push_str(" * "),
-                    Some(piece) => {
-                        result.push(piece.player().as_char());
-                        result.push(piece.kind().as_char());
-                        result.push(' ');
-                    }
-                }
-            }
-            result.push('\n');
-        }
-
-        f.write_str(&result)
     }
 }
 
@@ -664,6 +810,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
     }
 }
 
+#[derive(Debug)]
 struct LegalCapturesAtLocationIterator<'board> {
     board: &'board Board,
     player_to_move: usize,
@@ -826,6 +973,9 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.board.assert_board_integrity();
+        
+        println!("checking legal captures");
+        println!("{:?}", self);
 
         // lazy calculate our mailboxes of pieces. These help
         // speed up some checks later on.
@@ -864,33 +1014,6 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
             }
             self.attacking_defending_pieces_mailbox =
                 Some((attacking_pieces_mailbox, defending_pieces_mailbox));
-        }
-        let white_pieces_mailbox = self.board.pawns[white!()].0
-            | self.board.knights[white!()].0
-            | self.board.bishops[white!()].0
-            | self.board.rooks[white!()].0
-            | self.board.queens[white!()].0;
-        // Omit the kings. We only care about the opponent's king
-
-        let black_pieces_mailbox = self.board.pawns[black!()].0
-            | self.board.knights[black!()].0
-            | self.board.bishops[black!()].0
-            | self.board.rooks[black!()].0
-            | self.board.queens[black!()].0;
-        // Omit the kings. We only care about the opponent's king
-
-        let defending_pieces_mailbox;
-        let attacking_pieces_mailbox;
-        match self.player_to_move {
-            white!() => {
-                defending_pieces_mailbox = white_pieces_mailbox;
-                attacking_pieces_mailbox = black_pieces_mailbox | self.board.kings[black!()].0;
-            }
-            black!() => {
-                defending_pieces_mailbox = black_pieces_mailbox;
-                attacking_pieces_mailbox = white_pieces_mailbox | self.board.kings[white!()].0;
-            }
-            value => unreachable!("{}", value),
         }
 
         if let Some(move_) = self.handle_knight_shift_on_deck() {
@@ -1098,8 +1221,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
 
         if let Some(on_deck) = std::mem::take(&mut self.on_deck) {
             let new_location = king_bitboard >> on_deck;
-
-            if !self.is_check(self.player, new_location) {
+            if new_location != 0 && !self.is_check(self.player, new_location) {
                 return Some(Move {
                     from: Location::try_from(king_bitboard).expect("Only one king to exist"),
                     to: Location::try_from(new_location).expect("Only one new location to exist"),
@@ -1111,7 +1233,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             let left = king_bitboard << next_shift;
             let right = king_bitboard >> next_shift;
 
-            if !self.is_check(self.player, left) {
+            if left != 0 && !self.is_check(self.player, left) {
                 self.on_deck = Some(right);
                 return Some(Move {
                     from: Location::try_from(king_bitboard).expect("Only one king to exist"),
@@ -1119,7 +1241,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                 });
             }
 
-            if !self.is_check(self.player, right) {
+            if right != 0 && !self.is_check(self.player, right) {
                 return Some(Move {
                     from: Location::try_from(king_bitboard).expect("Only one king to exist"),
                     to: Location::try_from(right).expect("Only one new location to exists"),
@@ -1339,14 +1461,15 @@ mod shifts {
 
 #[cfg(test)]
 mod tests {
-    use chess_common::File;
-
-    use crate::chess_move::Move;
+    use std::str::FromStr;
 
     use super::Board;
 
     #[test]
-    fn classifies_pawn_moves_correctly() {
-        let starting_state = Board::default();
+    fn gets_legal_king_moves() {
+        let board = Board::from_str("RNBKQBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbkqbnr w KQkq - 0 1").unwrap();
+
+        let legal_king_moves = board.legal_king_moves().collect::<Vec<_>>();
+        assert_eq!(0, legal_king_moves.len());
     }
 }
