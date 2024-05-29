@@ -13,8 +13,8 @@ async fn get_legal_moves_handler(
     req: Query<LegalMovesRequest>,
 ) -> Result<Json<Vec<Move>>, StatusCode> {
     println!("{}", req.board_fen);
-    let board = Board::from_str(&req.board_fen).map_err(|fenErr| {
-        println!("{:?}", fenErr);
+    let board = Board::from_str(&req.board_fen).map_err(|fen_err| {
+        println!("{:?}", fen_err);
         StatusCode::BAD_REQUEST
     })?;
 

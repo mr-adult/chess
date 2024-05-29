@@ -40,7 +40,12 @@ pub(crate) async fn new_game() -> Html<String> {
         <div id="game_board">
             {board_html}
         </div>
-        <div id="game_fen">{raw_board.to_string()}</div>
+        <div style="text-align: center;">
+            <h5 style="margin-bottom: 5px;">"Game Code:"</h5>
+            <textarea readonly disabled id="game_fen" style="text-align: center; overflow: hidden; width: 400px; resize: none;">
+                {raw_board.to_string()}
+            </textarea>
+        </div>
     })
 }
 

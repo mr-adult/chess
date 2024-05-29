@@ -1,3 +1,7 @@
+html {
+    background-color: #999999;
+}
+
 .rank {
     display: flex;
     flex-direction: row;
