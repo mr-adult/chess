@@ -2,9 +2,11 @@ use std::{
     any,
     array::{from_fn, IntoIter},
     fmt::Display,
-    iter,
+    iter::{self, Peekable},
     ops::{Index, IndexMut},
+    path::Iter,
     str::FromStr,
+    vec::{self},
 };
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
@@ -156,13 +158,13 @@ impl ToString for Board {
 
         // FEN notation can only be 84 bytes max
         let mut result = String::with_capacity(84);
-        for (rank_num, rank) in Rank::all_ranks_ascending().enumerate() {
+        for (rank_num, rank) in Rank::all_ranks_ascending().rev().enumerate() {
             if rank_num != 0 {
                 result.push('/');
             }
 
             let mut empty_spaces = 0;
-            for file in File::all_files_ascending().rev() {
+            for file in File::all_files_ascending() {
                 match self.at(Location::new(file, rank)) {
                     None => empty_spaces += 1,
                     Some(piece) => {
@@ -740,6 +742,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
     /// moves.
     fn next(&mut self) -> Option<Self::Item> {
         if !self.king_moves_iterator_finished {
+            println!("Getting king move");
             let next_king_move = self.king_moves_iterator.next();
             if next_king_move.is_some() {
                 return next_king_move;
@@ -806,6 +809,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         return None;*/
+        return None;
         todo!();
     }
 }
@@ -843,6 +847,7 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
     }
 
     fn handle_knight_shift_on_deck(&mut self) -> Option<Move> {
+        println!("Knight shift on deck");
         if let Some(knight_shift) = std::mem::take(&mut self.knight_right_shift_on_deck) {
             let knight_square = self.target_square >> knight_shift;
             if knight_square & self.board.knights[self.player_to_move].0 != 0 {
@@ -864,15 +869,22 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
         defending_pieces_mailbox: u64,
     ) -> Option<Move> {
         if let Some(shift) = std::mem::take(&mut self.other_right_shift_on_deck) {
+            println!("Handling on-deck other shift of {shift}");
             let mut current_right = self.target_square >> shift;
             let mut is_first_right = true;
             loop {
+                println!("Current right: {current_right:064b}");
+                if current_right == 0 {
+                    break;
+                }
+
                 if defending_pieces_mailbox & current_right != 0 {
-                    return None;
+                    break;
                 }
 
                 if attacking_pieces_mailbox & current_right == 0 {
                     is_first_right = false;
+                    current_right >>= shift;
                     continue;
                 }
 
@@ -897,6 +909,7 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
 
                     // pawns and kings can only attack 1 square away
                     if !is_first_right {
+                        current_right >>= shift;
                         continue;
                     }
 
@@ -946,6 +959,7 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
                     }
 
                     if !is_first_right {
+                        current_right >>= shift;
                         continue;
                     }
 
@@ -960,7 +974,7 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
                 }
 
                 is_first_right = false;
-                current_right = current_right >> shift;
+                current_right >>= shift;
             }
         }
 
@@ -973,9 +987,8 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.board.assert_board_integrity();
-        
+
         println!("checking legal captures");
-        println!("{:?}", self);
 
         // lazy calculate our mailboxes of pieces. These help
         // speed up some checks later on.
@@ -1022,6 +1035,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
 
         if let Some(mut knight_shifts_to_check) = std::mem::take(&mut self.knight_shifts_to_check) {
             while let Some(knight_shift) = knight_shifts_to_check.next() {
+                println!("Checking knight shift of: {knight_shift}");
                 self.knight_right_shift_on_deck = Some(knight_shift);
 
                 let new_location = self.target_square << knight_shift;
@@ -1052,15 +1066,22 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
             while let Some(shift) = other_shifts.next() {
                 self.other_right_shift_on_deck = Some(shift);
 
+                println!("handling other left shift of: {shift}");
                 let mut current_left = self.target_square << shift;
                 let mut is_first_left = true;
                 loop {
+                    println!("current left: {current_left:064b}");
+                    if current_left == 0 {
+                        break;
+                    }
+
                     if defending_pieces_mailbox & current_left != 0 {
                         break;
                     }
 
                     if attacking_pieces_mailbox & current_left == 0 {
                         is_first_left = false;
+                        current_left <<= shift;
                         continue;
                     }
 
@@ -1087,6 +1108,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
 
                         // pawns and kings can only attack 1 square away
                         if !is_first_left {
+                            current_left <<= shift;
                             continue;
                         }
 
@@ -1103,6 +1125,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                         // Since this is a left shift, even if pawns are in these
                         // positions, they wouldn't be attacking the king.
                         if let white!() = self.player_to_move {
+                            current_left <<= shift;
                             continue;
                         }
 
@@ -1142,6 +1165,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                         }
 
                         if !is_first_left {
+                            current_left <<= shift;
                             continue;
                         }
 
@@ -1157,7 +1181,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     }
 
                     is_first_left = false;
-                    current_left = current_left << shift;
+                    current_left <<= shift;
                 }
 
                 if let Some(move_) = self
@@ -1182,17 +1206,20 @@ struct LegalKingMovesIterator<'board> {
     player: Player,
     king_bitboard: Option<u64>,
     on_deck: Option<u64>,
-    shifts: IntoIter<usize, 4>,
+    shifts: IntoIter<u32, 4>,
+    friendly_pieces: Option<u64>,
 }
 
 impl<'board> LegalKingMovesIterator<'board> {
     fn new(board: &'board Board, player: Player) -> Self {
+        println!("{}", board.to_string());
         Self {
             board,
             player,
             king_bitboard: None,
             on_deck: None,
-            shifts: shifts::all().into_iter(),
+            shifts: shifts::all_u32().into_iter(),
+            friendly_pieces: None,
         }
     }
 
@@ -1201,27 +1228,50 @@ impl<'board> LegalKingMovesIterator<'board> {
             .next()
             .is_some();
     }
+
+    fn get_king_bitboard(&mut self) -> u64 {
+        match self.king_bitboard {
+            None => {
+                let bitboard = self.board.kings[self.player.as_index()].0;
+                self.king_bitboard = Some(bitboard);
+                bitboard
+            }
+            Some(king_bitboard) => king_bitboard,
+        }
+    }
+
+    fn get_friendly_pieces(&mut self) -> u64 {
+        let player_index = self.player.as_index();
+        match self.friendly_pieces {
+            None => {
+                let friendlies = self.board.pawns[player_index].0
+                    | self.board.knights[player_index].0
+                    | self.board.bishops[player_index].0
+                    | self.board.rooks[player_index].0
+                    | self.board.queens[player_index].0;
+                self.friendly_pieces = Some(friendlies);
+                friendlies
+            }
+            Some(friendlies) => friendlies,
+        }
+    }
 }
 
 impl<'board> Iterator for LegalKingMovesIterator<'board> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let king_bitboard = match self.king_bitboard {
-            None => {
-                let king_bitboard = match self.player {
-                    Player::White => self.board.kings[white!()].0,
-                    Player::Black => self.board.kings[black!()].0,
-                };
-                self.king_bitboard = Some(king_bitboard);
-                king_bitboard
-            }
-            Some(king_bitboard) => king_bitboard,
-        };
+        let king_bitboard = self.get_king_bitboard();
+        let friendlies = self.get_friendly_pieces();
+
+        println!("King position: {:?}", Location::try_from(king_bitboard));
 
         if let Some(on_deck) = std::mem::take(&mut self.on_deck) {
-            let new_location = king_bitboard >> on_deck;
-            if new_location != 0 && !self.is_check(self.player, new_location) {
+            let new_location = on_deck;
+            if new_location & friendlies == 0
+                && new_location != 0
+                && !self.is_check(self.player, new_location)
+            {
                 return Some(Move {
                     from: Location::try_from(king_bitboard).expect("Only one king to exist"),
                     to: Location::try_from(new_location).expect("Only one new location to exist"),
@@ -1230,10 +1280,10 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
         }
 
         while let Some(next_shift) = self.shifts.next() {
-            let left = king_bitboard << next_shift;
-            let right = king_bitboard >> next_shift;
+            let left = king_bitboard.wrapping_shl(next_shift);
+            let right = king_bitboard.wrapping_shr(next_shift);
 
-            if left != 0 && !self.is_check(self.player, left) {
+            if left & friendlies == 0 && left != 0 && !self.is_check(self.player, left) {
                 self.on_deck = Some(right);
                 return Some(Move {
                     from: Location::try_from(king_bitboard).expect("Only one king to exist"),
@@ -1241,7 +1291,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                 });
             }
 
-            if right != 0 && !self.is_check(self.player, right) {
+            if right & friendlies == 0 && right != 0 && !self.is_check(self.player, right) {
                 return Some(Move {
                     from: Location::try_from(king_bitboard).expect("Only one king to exist"),
                     to: Location::try_from(right).expect("Only one new location to exists"),
@@ -1256,7 +1306,8 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
 struct LegalPawnMovesIterator<'board> {
     board: &'board Board,
     checked_en_passants: bool,
-    en_passant_lookahead: Option<Move>,
+    lookahead: Option<Move>,
+    locations: vec::IntoIter<Location>,
 }
 
 impl<'board> LegalPawnMovesIterator<'board> {
@@ -1264,7 +1315,13 @@ impl<'board> LegalPawnMovesIterator<'board> {
         Self {
             board,
             checked_en_passants: false,
-            en_passant_lookahead: None,
+            lookahead: None,
+            locations: Rank::all_ranks_ascending()
+                .flat_map(|rank| {
+                    File::all_files_ascending().map(move |file| Location::new(file, rank))
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
         }
     }
 }
@@ -1289,7 +1346,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                         let en_passant_right = move_bits >> shifts::right!();
 
                         if en_passant_right & player_to_move_pawns != 0 {
-                            self.en_passant_lookahead = Some(Move {
+                            self.lookahead = Some(Move {
                                 from: Location::try_from(en_passant_right)
                                     .expect(Location::failed_from_usize_message()),
                                 to: Location::try_from(match player_to_move {
@@ -1314,7 +1371,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                             });
                         }
 
-                        if let Some(lookahead) = std::mem::take(&mut self.en_passant_lookahead) {
+                        if let Some(lookahead) = std::mem::take(&mut self.lookahead) {
                             return Some(lookahead);
                         }
                     }
@@ -1322,6 +1379,62 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
             }
         }
 
+        if let Some(lookahead) = std::mem::take(&mut self.lookahead) {
+            return Some(lookahead);
+        }
+
+        while let Some(location) = self.locations.next() {
+            let location_u64 = location.as_u64();
+            println!("Checking for pawn moves on {location:?}");
+            if self.board.pawns[self.board.get_player_to_move().as_index()].0 & location_u64 != 0 {
+                match self.board.get_player_to_move() {
+                    Player::White => {
+                        let new_location = location_u64 << shifts::down!();
+
+                        if location.rank() == Rank::Two {
+                            let new_location_double = new_location << shifts::down!();
+                            if new_location_double != 0 {
+                                self.lookahead = Some(Move {
+                                    from: location,
+                                    to: Location::try_from(new_location_double)
+                                        .expect(Location::failed_from_usize_message()),
+                                });
+                            }
+                        }
+
+                        if new_location != 0 {
+                            return Some(Move {
+                                from: location,
+                                to: Location::try_from(new_location).unwrap(),
+                            });
+                        }
+                    }
+                    Player::Black => {
+                        let new_location = location_u64 >> shifts::down!();
+
+                        if location.rank() == Rank::Seven {
+                            let new_location_double = new_location >> shifts::down!();
+                            if new_location_double != 0 {
+                                self.lookahead = Some(Move {
+                                    from: location,
+                                    to: Location::try_from(new_location_double)
+                                        .expect(Location::failed_from_usize_message()),
+                                });
+                            }
+                        }
+
+                        if new_location != 0 {
+                            return Some(Move {
+                                from: location,
+                                to: Location::try_from(new_location).unwrap(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        return None;
         todo!("standard");
     }
 }
@@ -1432,6 +1545,10 @@ mod shifts {
         [down_left!(), down!(), down_right!(), right!()]
     }
 
+    pub(super) fn all_u32() -> [u32; 4] {
+        [down_left!(), down!(), down_right!(), right!()]
+    }
+
     pub(super) fn straights() -> [usize; 2] {
         [down!(), right!()]
     }
@@ -1467,7 +1584,8 @@ mod tests {
 
     #[test]
     fn gets_legal_king_moves() {
-        let board = Board::from_str("RNBKQBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbkqbnr w KQkq - 0 1").unwrap();
+        let board =
+            Board::from_str("RNBKQBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbkqbnr w KQkq - 0 1").unwrap();
 
         let legal_king_moves = board.legal_king_moves().collect::<Vec<_>>();
         assert_eq!(0, legal_king_moves.len());

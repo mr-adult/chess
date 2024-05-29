@@ -3,7 +3,7 @@ use std::str::FromStr;
 use chess_common::Location;
 use serde_derive::Serialize;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Move {
     pub(crate) from: Location,
     pub(crate) to: Location,
