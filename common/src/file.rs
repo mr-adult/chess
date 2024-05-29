@@ -1,7 +1,9 @@
-use serde_derive::Serialize;
+use std::array::IntoIter;
+
+use serde::Serialize;
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum File {
     a = 0,
     b = 1,
@@ -14,7 +16,7 @@ pub enum File {
 }
 
 impl File {
-    pub fn all_files_ascending() -> impl DoubleEndedIterator<Item = File> {
+    pub fn all_files_ascending() -> IntoIter<Self, 8> {
         [
             Self::a,
             Self::b,
@@ -64,6 +66,19 @@ impl File {
             Self::f => 5,
             Self::g => 6,
             Self::h => 7,
+        }
+    }
+
+    pub const fn bit_filter(&self) -> u64 {
+        match self {
+            Self::a => Self::a_bit_filter(),
+            Self::b => Self::b_bit_filter(),
+            Self::c => Self::c_bit_filter(),
+            Self::d => Self::d_bit_filter(),
+            Self::e => Self::e_bit_filter(),
+            Self::f => Self::f_bit_filter(),
+            Self::g => Self::g_bit_filter(),
+            Self::h => Self::h_bit_filter(),
         }
     }
 
@@ -156,5 +171,13 @@ impl TryFrom<char> for File {
             'h' => Ok(File::h),
             _ => Err(()),
         }
+    }
+}
+
+impl Serialize for File {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        serializer.serialize_char(self.as_char())
     }
 }

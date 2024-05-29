@@ -1,6 +1,8 @@
-use serde_derive::Serialize;
+use std::array::IntoIter;
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+use serde::Serialize;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Rank {
     One = 1,
     Two = 2,
@@ -13,7 +15,7 @@ pub enum Rank {
 }
 
 impl Rank {
-    pub fn all_ranks_ascending() -> impl DoubleEndedIterator<Item = Rank> {
+    pub fn all_ranks_ascending() -> IntoIter<Self, 8> {
         [
             Self::One,
             Self::Two,
@@ -55,14 +57,27 @@ impl Rank {
 
     pub fn as_int(self) -> i8 {
         match self {
-            Self::One => 0,
-            Self::Two => 1,
-            Self::Three => 2,
-            Self::Four => 3,
-            Self::Five => 4,
-            Self::Six => 5,
-            Self::Seven => 6,
-            Self::Eight => 7,
+            Self::One => 1,
+            Self::Two => 2,
+            Self::Three => 3,
+            Self::Four => 4,
+            Self::Five => 5,
+            Self::Six => 6,
+            Self::Seven => 7,
+            Self::Eight => 8,
+        }
+    }
+
+    pub const fn bit_filter(&self) -> u64 {
+        match self {
+            Self::One => Self::one_bit_filter(),
+            Self::Two => Self::two_bit_filter(),
+            Self::Three => Self::three_bit_filter(),
+            Self::Four => Self::four_bit_filter(),
+            Self::Five => Self::five_bit_filter(),
+            Self::Six => Self::six_bit_filter(),
+            Self::Seven => Self::seven_bit_filter(),
+            Self::Eight => Self::eight_bit_filter(),
         }
     }
 
@@ -155,5 +170,13 @@ impl TryFrom<char> for Rank {
             '8' => Ok(Rank::Eight),
             _ => Err(()),
         }
+    }
+}
+
+impl Serialize for Rank {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        serializer.serialize_i8(self.as_int())
     }
 }
