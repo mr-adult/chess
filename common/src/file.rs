@@ -15,8 +15,9 @@ pub enum File {
     h = 7,
 }
 
+pub type FilesIterator = IntoIter<File, 8>;
 impl File {
-    pub fn all_files_ascending() -> IntoIter<Self, 8> {
+    pub fn all_files_ascending() -> FilesIterator {
         [
             Self::a,
             Self::b,

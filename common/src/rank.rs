@@ -14,8 +14,9 @@ pub enum Rank {
     Eight = 8,
 }
 
+pub type RanksIterator = IntoIter<Rank, 8>;
 impl Rank {
-    pub fn all_ranks_ascending() -> IntoIter<Self, 8> {
+    pub fn all_ranks_ascending() -> RanksIterator {
         [
             Self::One,
             Self::Two,

@@ -12,6 +12,11 @@ impl Location {
         Location { file, rank }
     }
 
+    pub fn all_locations() -> impl Iterator<Item = Location> {
+        Rank::all_ranks_ascending()
+            .flat_map(|rank| File::all_files_ascending().map(move |file| Location::new(file, rank)))
+    }
+
     pub const fn failed_from_usize_message() -> &'static str {
         "Expected only one bit to be populated."
     }
@@ -35,6 +40,7 @@ impl TryFrom<u64> for Location {
     fn try_from(value: u64) -> Result<Self, Self::Error> {
         // https://stackoverflow.com/questions/28303832/check-if-byte-has-more-than-one-bit-set
         if value == 0 || value & (value - 1) != 0 {
+            println!("Value:\n{:?}", value);
             return Err(());
         }
 
@@ -79,6 +85,15 @@ impl TryFrom<u64> for Location {
         };
 
         Ok(Location::new(file, rank))
+    }
+}
+
+impl ToString for Location {
+    fn to_string(&self) -> String {
+        let mut result = String::with_capacity(2);
+        result.push(self.file.as_char());
+        result.push(self.rank.as_char());
+        return result;
     }
 }
 
