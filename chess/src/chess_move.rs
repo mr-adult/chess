@@ -9,18 +9,6 @@ pub struct Move {
     pub(crate) to: Location,
 }
 
-impl Move {}
-
-impl FromStr for Move {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        todo!()
-    }
-}
-
-
-
 pub(crate) enum PawnMoveKind {
     Push,
     DoublePush,

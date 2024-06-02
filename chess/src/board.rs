@@ -1,24 +1,19 @@
 use std::{
-    any,
     array::{from_fn, IntoIter},
-    fmt::Display,
-    iter::{self, Peekable},
+    iter::{self},
     ops::{Index, IndexMut},
-    path::Iter,
     str::FromStr,
-    vec::{self},
 };
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{parse_fen, BoardLayout, FenErr};
 
 use crate::{
-    bitboard::BitBoard,
-    chess_move::{IllegalMove, KingMoveKind, MoveKind, PawnMoveKind},
+    arr_deque::ArrDeque,
+    bitboard::{BitBoard, DiagonalMovesIterator, KnightMovesIterator, StraightMovesIterator},
+    chess_move::{IllegalMove, MoveKind, PawnMoveKind},
     Move,
 };
-
-use self::shifts::{down_left, down_right, up_left, up_right};
 
 #[derive(Debug)]
 pub struct ErgonomicBoard {
@@ -285,6 +280,16 @@ impl Board {
             .chain(self.queens.iter())
             .chain(self.kings.iter())
             .chain(iter::once(&self.mailbox));
+    }
+
+    fn create_mailbox_for_player(&self, player: Player) -> BitBoard {
+        let player_index = player.as_index();
+        return BitBoard(self.pawns[player_index].0
+            | self.knights[player_index].0
+            | self.bishops[player_index].0
+            | self.rooks[player_index].0
+            | self.queens[player_index].0
+            | self.kings[player_index].0);
     }
 
     fn get_player_to_move(&self) -> Player {
@@ -629,7 +634,7 @@ struct LegalMovesIterator<'board> {
     player: Player,
     is_check: Option<bool>,
     pawn_moves_iterator: Option<LegalPawnMovesIterator<'board>>,
-    knight_moves_iterator: Option<LegalKnightMovesIterator<'board>>,
+    knight_moves_iterator: Option<LegalKnightMovesIterator>,
     bishop_moves_iterator: Option<LegalBishopMovesIterator<'board>>,
     rook_moves_iterator: Option<LegalRookMovesIterator<'board>>,
     queen_moves_iterator: Option<LegalQueenMovesIterator<'board>>,
@@ -646,7 +651,7 @@ impl<'board> LegalMovesIterator<'board> {
             player: player_to_move,
             is_check: None,
             pawn_moves_iterator: Some(LegalPawnMovesIterator::new(board)),
-            knight_moves_iterator: Some(LegalKnightMovesIterator { board }),
+            knight_moves_iterator: Some(LegalKnightMovesIterator::new(board)),
             bishop_moves_iterator: Some(LegalBishopMovesIterator { board }),
             rook_moves_iterator: Some(LegalRookMovesIterator { board }),
             queen_moves_iterator: Some(LegalQueenMovesIterator { board }),
@@ -662,7 +667,7 @@ impl<'board> LegalMovesIterator<'board> {
             player: piece.player(),
             is_check: None,
             pawn_moves_iterator: Some(LegalPawnMovesIterator::new(board)),
-            knight_moves_iterator: Some(LegalKnightMovesIterator { board }),
+            knight_moves_iterator: Some(LegalKnightMovesIterator::new(board)),
             bishop_moves_iterator: Some(LegalBishopMovesIterator { board }),
             rook_moves_iterator: Some(LegalRookMovesIterator { board }),
             queen_moves_iterator: Some(LegalQueenMovesIterator { board }),
@@ -720,6 +725,21 @@ impl<'board> LegalMovesIterator<'board> {
             Player::Black => self.board.kings[black!()].0,
         };
     }
+
+    fn is_check(&mut self) -> bool {
+        match self.is_check {
+            None => {
+                println!("Starting is_check LegalMovesIterator");
+                let checked = self
+                    .king_moves_iterator
+                    .is_check(self.player, self.board.kings[self.player.as_index()].0);
+                println!("{checked}");
+                self.is_check = Some(checked);
+                checked
+            }
+            Some(is_check) => is_check,
+        }
+    }
 }
 
 impl<'board> Iterator for LegalMovesIterator<'board> {
@@ -742,7 +762,6 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
     /// moves.
     fn next(&mut self) -> Option<Self::Item> {
         if !self.king_moves_iterator_finished {
-            println!("Getting king move");
             let next_king_move = self.king_moves_iterator.next();
             if next_king_move.is_some() {
                 return next_king_move;
@@ -752,17 +771,10 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         // lazy calculate whether we are in check.
-        let is_check = match self.is_check {
-            None => {
-                let is_check = self
-                    .king_moves_iterator
-                    .is_check(self.player, self.board.kings[self.player.as_index()].0);
-                self.is_check = Some(is_check);
-                is_check
-            }
-            Some(is_check) => is_check,
-        };
+        // let is_check = self.king_moves_iterator.is_check(self.player, self.board.kings[self.player.as_index()].0);
+        // println!("Finished calculating is_check: {is_check}");
 
+        println!("Calculating pawn moves");
         if let Some(pawn_moves) = &mut self.pawn_moves_iterator {
             let next_pawn_move = pawn_moves.next();
             if next_pawn_move.is_some() {
@@ -772,7 +784,8 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             }
         }
 
-        /*if let Some(knight_moves) = &mut self.knight_moves_iterator {
+        println!("Calculating knight moves");
+        if let Some(knight_moves) = &mut self.knight_moves_iterator {
             let next_knight_move = knight_moves.next();
             if next_knight_move.is_some() {
                 return next_knight_move;
@@ -781,7 +794,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             }
         }
 
-        if let Some(bishop_moves) = &mut self.bishop_moves_iterator {
+        /*if let Some(bishop_moves) = &mut self.bishop_moves_iterator {
             let next_bishop_move = bishop_moves.next();
             if next_bishop_move.is_some() {
                 return next_bishop_move;
@@ -809,6 +822,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         return None;*/
+        println!("Done calculating moves");
         return None;
         todo!();
     }
@@ -820,10 +834,12 @@ struct LegalCapturesAtLocationIterator<'board> {
     player_to_move: usize,
     target_square: u64,
     attacking_defending_pieces_mailbox: Option<(u64, u64)>,
-    knight_shifts_to_check: Option<IntoIter<usize, 4>>,
-    knight_right_shift_on_deck: Option<usize>,
-    other_shifts_to_check: Option<IntoIter<usize, 4>>,
-    other_right_shift_on_deck: Option<usize>,
+    knight_moves: KnightMovesIterator,
+    knight_moves_is_done: bool,
+    diagonal_moves: DiagonalMovesIterator,
+    diagonal_moves_is_done: bool,
+    straight_moves: StraightMovesIterator,
+    straight_moves_is_done: bool,
 }
 
 impl<'board> LegalCapturesAtLocationIterator<'board> {
@@ -834,151 +850,20 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
             target
         );
 
+        let target_bb = BitBoard(target);
+
         Self {
             board,
             player_to_move: player_to_move.as_index(),
             target_square: target,
             attacking_defending_pieces_mailbox: None,
-            knight_shifts_to_check: Some(shifts::knights().into_iter()),
-            knight_right_shift_on_deck: None,
-            other_shifts_to_check: Some(shifts::all().into_iter()),
-            other_right_shift_on_deck: None,
+            knight_moves: target_bb.knight_moves(),
+            knight_moves_is_done: false,
+            diagonal_moves: target_bb.diagonal_moves(),
+            diagonal_moves_is_done: false,
+            straight_moves: target_bb.straight_moves(),
+            straight_moves_is_done: false,
         }
-    }
-
-    fn handle_knight_shift_on_deck(&mut self) -> Option<Move> {
-        println!("Knight shift on deck");
-        if let Some(knight_shift) = std::mem::take(&mut self.knight_right_shift_on_deck) {
-            let knight_square = self.target_square >> knight_shift;
-            if knight_square & self.board.knights[self.player_to_move].0 != 0 {
-                return Some(Move {
-                    from: Location::try_from(knight_square)
-                        .expect(Location::failed_from_usize_message()),
-                    to: Location::try_from(self.target_square)
-                        .expect(Location::failed_from_usize_message()),
-                });
-            }
-        }
-
-        return None;
-    }
-
-    fn handle_other_shift_on_deck(
-        &mut self,
-        attacking_pieces_mailbox: u64,
-        defending_pieces_mailbox: u64,
-    ) -> Option<Move> {
-        if let Some(shift) = std::mem::take(&mut self.other_right_shift_on_deck) {
-            println!("Handling on-deck other shift of {shift}");
-            let mut current_right = self.target_square >> shift;
-            let mut is_first_right = true;
-            loop {
-                println!("Current right: {current_right:064b}");
-                if current_right == 0 {
-                    break;
-                }
-
-                if defending_pieces_mailbox & current_right != 0 {
-                    break;
-                }
-
-                if attacking_pieces_mailbox & current_right == 0 {
-                    is_first_right = false;
-                    current_right >>= shift;
-                    continue;
-                }
-
-                if shifts::is_diagonal(shift) {
-                    if self.board.bishops[self.player_to_move].0 & current_right != 0 {
-                        return Some(Move {
-                            from: Location::try_from(current_right)
-                                .expect(Location::failed_from_usize_message()),
-                            to: Location::try_from(self.target_square)
-                                .expect(Location::failed_from_usize_message()),
-                        });
-                    }
-
-                    if self.board.queens[self.player_to_move].0 & current_right != 0 {
-                        return Some(Move {
-                            from: Location::try_from(current_right)
-                                .expect(Location::failed_from_usize_message()),
-                            to: Location::try_from(self.target_square)
-                                .expect(Location::failed_from_usize_message()),
-                        });
-                    }
-
-                    // pawns and kings can only attack 1 square away
-                    if !is_first_right {
-                        current_right >>= shift;
-                        continue;
-                    }
-
-                    if self.board.kings[self.player_to_move].0 & current_right != 0 {
-                        return Some(Move {
-                            from: Location::try_from(current_right)
-                                .expect(Location::failed_from_usize_message()),
-                            to: Location::try_from(self.target_square)
-                                .expect(Location::failed_from_usize_message()),
-                        });
-                    }
-
-                    // Since this is a right shift, even if pawns are in these
-                    // positions, they wouldn't be attacking the king.
-                    if let black!() = self.player_to_move {
-                        continue;
-                    }
-
-                    if (shift == ((up_left!() as i32).abs() as usize)
-                        || shift == ((up_right!() as i32).abs() as usize))
-                        && self.board.pawns[black!()].0 & current_right != 0
-                    {
-                        return Some(Move {
-                            from: Location::try_from(current_right)
-                                .expect(Location::failed_from_usize_message()),
-                            to: Location::try_from(self.target_square)
-                                .expect(Location::failed_from_usize_message()),
-                        });
-                    }
-                } else if shifts::is_straight(shift) {
-                    if self.board.rooks[self.player_to_move].0 & current_right != 0 {
-                        return Some(Move {
-                            from: Location::try_from(current_right)
-                                .expect(Location::failed_from_usize_message()),
-                            to: Location::try_from(self.target_square)
-                                .expect(Location::failed_from_usize_message()),
-                        });
-                    }
-
-                    if self.board.queens[self.player_to_move].0 & current_right != 0 {
-                        return Some(Move {
-                            from: Location::try_from(current_right)
-                                .expect(Location::failed_from_usize_message()),
-                            to: Location::try_from(self.target_square)
-                                .expect(Location::failed_from_usize_message()),
-                        });
-                    }
-
-                    if !is_first_right {
-                        current_right >>= shift;
-                        continue;
-                    }
-
-                    if self.board.kings[self.player_to_move].0 & current_right != 0 {
-                        return Some(Move {
-                            from: Location::try_from(current_right)
-                                .expect(Location::failed_from_usize_message()),
-                            to: Location::try_from(self.target_square)
-                                .expect(Location::failed_from_usize_message()),
-                        });
-                    }
-                }
-
-                is_first_right = false;
-                current_right >>= shift;
-            }
-        }
-
-        return None;
     }
 }
 
@@ -986,9 +871,8 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
+        println!("Starting legal captures .next()");
         self.board.assert_board_integrity();
-
-        println!("checking legal captures");
 
         // lazy calculate our mailboxes of pieces. These help
         // speed up some checks later on.
@@ -1029,231 +913,101 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                 Some((attacking_pieces_mailbox, defending_pieces_mailbox));
         }
 
-        if let Some(move_) = self.handle_knight_shift_on_deck() {
-            return Some(move_);
-        }
-
-        if let Some(mut knight_shifts_to_check) = std::mem::take(&mut self.knight_shifts_to_check) {
-            while let Some(knight_shift) = knight_shifts_to_check.next() {
-                println!("Checking knight shift of: {knight_shift}");
-                self.knight_right_shift_on_deck = Some(knight_shift);
-
-                let new_location = self.target_square << knight_shift;
-                if new_location & self.board.knights[self.player_to_move].0 != 0 {
-                    self.knight_shifts_to_check = Some(knight_shifts_to_check);
+        println!("Calculating knight moves");
+        if !self.knight_moves_is_done {
+            while let Some(attacking_knight_square) = self.knight_moves.next() {
+                if self.board.knights[self.player_to_move].intersects_with_u64(self.target_square) {
                     return Some(Move {
-                        from: Location::try_from(new_location)
+                        from: Location::try_from(attacking_knight_square.0)
                             .expect(Location::failed_from_usize_message()),
-                        to: Location::try_from(new_location)
+                        to: Location::try_from(self.target_square)
                             .expect(Location::failed_from_usize_message()),
                     });
                 }
-
-                if let Some(move_) = self.handle_knight_shift_on_deck() {
-                    self.knight_shifts_to_check = Some(knight_shifts_to_check);
-                    return Some(move_);
-                }
             }
+            println!("Done with knight moves");
+            self.knight_moves_is_done = true;
         }
 
-        if let Some(move_) =
-            self.handle_other_shift_on_deck(attacking_pieces_mailbox, defending_pieces_mailbox)
-        {
-            return Some(move_);
-        }
-
-        if let Some(mut other_shifts) = std::mem::take(&mut self.other_shifts_to_check) {
-            while let Some(shift) = other_shifts.next() {
-                self.other_right_shift_on_deck = Some(shift);
-
-                println!("handling other left shift of: {shift}");
-                let mut current_left = self.target_square << shift;
-                let mut is_first_left = true;
-                loop {
-                    println!("current left: {current_left:064b}");
-                    if current_left == 0 {
-                        break;
-                    }
-
-                    if defending_pieces_mailbox & current_left != 0 {
-                        break;
-                    }
-
-                    if attacking_pieces_mailbox & current_left == 0 {
-                        is_first_left = false;
-                        current_left <<= shift;
-                        continue;
-                    }
-
-                    if shifts::is_diagonal(shift) {
-                        if self.board.bishops[self.player_to_move].0 & current_left != 0 {
-                            self.other_shifts_to_check = Some(other_shifts);
-                            return Some(Move {
-                                from: Location::try_from(current_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(self.target_square)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
-
-                        if self.board.queens[self.player_to_move].0 & current_left != 0 {
-                            self.other_shifts_to_check = Some(other_shifts);
-                            return Some(Move {
-                                from: Location::try_from(current_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(self.target_square)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
-
-                        // pawns and kings can only attack 1 square away
-                        if !is_first_left {
-                            current_left <<= shift;
-                            continue;
-                        }
-
-                        if self.board.kings[self.player_to_move].0 & current_left != 0 {
-                            self.other_shifts_to_check = Some(other_shifts);
-                            return Some(Move {
-                                from: Location::try_from(current_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(self.target_square)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
-
-                        // Since this is a left shift, even if pawns are in these
-                        // positions, they wouldn't be attacking the king.
-                        if let white!() = self.player_to_move {
-                            current_left <<= shift;
-                            continue;
-                        }
-
-                        if (shift == ((down_right!() as i32).abs() as usize)
-                            || shift == ((down_left!() as i32).abs() as usize))
-                            && self.board.pawns[black!()].0 & current_left != 0
-                        {
-                            self.other_shifts_to_check = Some(other_shifts);
-                            return Some(Move {
-                                from: Location::try_from(current_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(self.target_square)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
-                    }
-
-                    if shifts::is_straight(shift) {
-                        if self.board.rooks[self.player_to_move].0 & current_left != 0 {
-                            self.other_shifts_to_check = Some(other_shifts);
-                            return Some(Move {
-                                from: Location::try_from(current_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(self.target_square)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
-
-                        if self.board.queens[self.player_to_move].0 & current_left != 0 {
-                            self.other_shifts_to_check = Some(other_shifts);
-                            return Some(Move {
-                                from: Location::try_from(current_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(self.target_square)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
-
-                        if !is_first_left {
-                            current_left <<= shift;
-                            continue;
-                        }
-
-                        if self.board.kings[self.player_to_move].0 & current_left != 0 {
-                            self.other_shifts_to_check = Some(other_shifts);
-                            return Some(Move {
-                                from: Location::try_from(current_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(self.target_square)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
-                    }
-
-                    is_first_left = false;
-                    current_left <<= shift;
-                }
-
-                if let Some(move_) = self
-                    .handle_other_shift_on_deck(attacking_pieces_mailbox, defending_pieces_mailbox)
+        println!("Calculating bishop moves");
+        if !self.diagonal_moves_is_done {
+            while let Some(diagonal_move) = self.diagonal_moves.next() {
+                if self.board.bishops[self.player_to_move].intersects_with(&diagonal_move)
+                    || self.board.queens[self.player_to_move].intersects_with(&diagonal_move)
                 {
-                    return Some(move_);
+                    return Some(Move {
+                        from: Location::try_from(diagonal_move.0)
+                            .expect(Location::failed_from_usize_message()),
+                        to: Location::try_from(self.target_square)
+                            .expect(Location::failed_from_usize_message()),
+                    });
                 }
             }
+
+            self.diagonal_moves_is_done = true;
         }
 
+        println!("Calculating rook moves");
+        if !self.straight_moves_is_done {
+            while let Some(straight_move) = self.straight_moves.next() {
+                if self.board.rooks[self.player_to_move].intersects_with(&straight_move)
+                    || self.board.queens[self.player_to_move].intersects_with(&straight_move)
+                {
+                    return Some(Move {
+                        from: Location::try_from(straight_move.0)
+                            .expect(Location::failed_from_usize_message()),
+                        to: Location::try_from(self.target_square)
+                            .expect(Location::failed_from_usize_message()),
+                    });
+                }
+            }
+
+            self.straight_moves_is_done = true;
+        }
+
+        println!("Finished calculating moves");
         return None;
     }
-}
-
-struct CheckData {
-    squares_to_block_active_check: Vec<[Option<u64>; 8]>,
-    squares_that_are_currently_blocking_check: [Option<u64>; 8],
 }
 
 struct LegalKingMovesIterator<'board> {
     board: &'board Board,
     player: Player,
-    king_bitboard: Option<u64>,
-    on_deck: Option<u64>,
-    shifts: IntoIter<u32, 4>,
-    friendly_pieces: Option<u64>,
+    king_bitboard: BitBoard,
+    moves: IntoIter<BitBoard, 8>,
+    friendly_pieces: u64,
 }
 
 impl<'board> LegalKingMovesIterator<'board> {
     fn new(board: &'board Board, player: Player) -> Self {
-        println!("{}", board.to_string());
+        let player_index = player.as_index();
+        let king_bitboard = board.kings[player_index].clone();
         Self {
             board,
             player,
-            king_bitboard: None,
-            on_deck: None,
-            shifts: shifts::all_u32().into_iter(),
-            friendly_pieces: None,
+            king_bitboard: king_bitboard.clone(),
+            moves: [
+                king_bitboard.up(),
+                king_bitboard.up_right(),
+                king_bitboard.right(),
+                king_bitboard.down_right(),
+                king_bitboard.down(),
+                king_bitboard.down_left(),
+                king_bitboard.left(),
+                king_bitboard.up_left(),
+            ]
+            .into_iter(),
+            friendly_pieces: board.pawns[player_index].0
+                | board.knights[player_index].0
+                | board.bishops[player_index].0
+                | board.rooks[player_index].0
+                | board.queens[player_index].0,
         }
     }
 
     fn is_check(&self, player: Player, king_position: u64) -> bool {
-        return LegalCapturesAtLocationIterator::new(&self.board, player, king_position)
-            .next()
-            .is_some();
-    }
-
-    fn get_king_bitboard(&mut self) -> u64 {
-        match self.king_bitboard {
-            None => {
-                let bitboard = self.board.kings[self.player.as_index()].0;
-                self.king_bitboard = Some(bitboard);
-                bitboard
-            }
-            Some(king_bitboard) => king_bitboard,
-        }
-    }
-
-    fn get_friendly_pieces(&mut self) -> u64 {
-        let player_index = self.player.as_index();
-        match self.friendly_pieces {
-            None => {
-                let friendlies = self.board.pawns[player_index].0
-                    | self.board.knights[player_index].0
-                    | self.board.bishops[player_index].0
-                    | self.board.rooks[player_index].0
-                    | self.board.queens[player_index].0;
-                self.friendly_pieces = Some(friendlies);
-                friendlies
-            }
-            Some(friendlies) => friendlies,
-        }
+        let mut iterator = LegalCapturesAtLocationIterator::new(&self.board, player, king_position);
+        iterator.next().is_some()
     }
 }
 
@@ -1261,42 +1015,29 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let king_bitboard = self.get_king_bitboard();
-        let friendlies = self.get_friendly_pieces();
+        let king_bitboard = self.king_bitboard.clone();
+        let friendlies = self.friendly_pieces;
 
-        println!("King position: {:?}", Location::try_from(king_bitboard));
-
-        if let Some(on_deck) = std::mem::take(&mut self.on_deck) {
-            let new_location = on_deck;
-            if new_location & friendlies == 0
-                && new_location != 0
-                && !self.is_check(self.player, new_location)
-            {
-                return Some(Move {
-                    from: Location::try_from(king_bitboard).expect("Only one king to exist"),
-                    to: Location::try_from(new_location).expect("Only one new location to exist"),
-                });
-            }
-        }
-
-        while let Some(next_shift) = self.shifts.next() {
-            let left = king_bitboard.wrapping_shl(next_shift);
-            let right = king_bitboard.wrapping_shr(next_shift);
-
-            if left & friendlies == 0 && left != 0 && !self.is_check(self.player, left) {
-                self.on_deck = Some(right);
-                return Some(Move {
-                    from: Location::try_from(king_bitboard).expect("Only one king to exist"),
-                    to: Location::try_from(left).expect("Only one new location to exist"),
-                });
+        while let Some(king_move) = self.moves.next() {
+            if king_move.0 == 0 {
+                continue;
             }
 
-            if right & friendlies == 0 && right != 0 && !self.is_check(self.player, right) {
-                return Some(Move {
-                    from: Location::try_from(king_bitboard).expect("Only one king to exist"),
-                    to: Location::try_from(right).expect("Only one new location to exists"),
-                });
+            if king_move.intersects_with_u64(friendlies) {
+                continue;
             }
+
+            println!("Starting is_check LegalKingMovesIterator");
+            if self.is_check(self.player, self.king_bitboard.0) {
+                continue;
+            }
+            println!("finished is_check");
+
+            return Some(Move {
+                from: Location::try_from(king_bitboard.0)
+                    .expect(Location::failed_from_usize_message()),
+                to: Location::try_from(king_move.0).expect(Location::failed_from_usize_message()),
+            });
         }
 
         None
@@ -1306,22 +1047,27 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
 struct LegalPawnMovesIterator<'board> {
     board: &'board Board,
     checked_en_passants: bool,
-    lookahead: Option<Move>,
-    locations: vec::IntoIter<Location>,
+    hostiles: BitBoard,
+    lookahead: ArrDeque<Move, 3>,
+    locations: Box<dyn Iterator<Item = Location>>,
 }
 
 impl<'board> LegalPawnMovesIterator<'board> {
     fn new(board: &'board Board) -> Self {
+        let hostile_player = board.get_player_to_move().other_player().as_index();
         Self {
             board,
             checked_en_passants: false,
-            lookahead: None,
-            locations: Rank::all_ranks_ascending()
-                .flat_map(|rank| {
-                    File::all_files_ascending().map(move |file| Location::new(file, rank))
-                })
-                .collect::<Vec<_>>()
-                .into_iter(),
+            hostiles: BitBoard(
+                board.pawns[hostile_player].0
+                    | board.knights[hostile_player].0
+                    | board.bishops[hostile_player].0
+                    | board.rooks[hostile_player].0
+                    | board.queens[hostile_player].0
+                    | board.kings[hostile_player].0,
+            ),
+            lookahead: ArrDeque::new(),
+            locations: Box::new(Location::all_locations()),
         }
     }
 }
@@ -1330,6 +1076,10 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(lookahead) = self.lookahead.pop_front() {
+            return Some(lookahead);
+        }
+
         if !self.checked_en_passants {
             self.checked_en_passants = true;
             if let Some(last_move) = self.board.history.last() {
@@ -1339,39 +1089,45 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                     if let PieceKind::Pawn = moved_piece.kind() {
                         let player_to_move = self.board.get_player_to_move().as_index();
 
-                        let move_bits = last_move.to.as_u64();
-                        let player_to_move_pawns = self.board.pawns[player_to_move].0;
+                        let move_bb = BitBoard(last_move.to.as_u64());
+                        let player_to_move_pawns = self.board.pawns[player_to_move].clone();
 
-                        let en_passant_left = move_bits << shifts::right!();
-                        let en_passant_right = move_bits >> shifts::right!();
+                        let en_passant_left = move_bb.left();
+                        let en_passant_right = move_bb.right();
 
-                        if en_passant_right & player_to_move_pawns != 0 {
-                            self.lookahead = Some(Move {
-                                from: Location::try_from(en_passant_right)
+                        if en_passant_left.intersects_with(&player_to_move_pawns) {
+                            debug_assert!(self
+                                .lookahead
+                                .push_back(Move {
+                                    from: Location::try_from(en_passant_left.0)
+                                        .expect(Location::failed_from_usize_message()),
+                                    to: Location::try_from(match player_to_move {
+                                        white!() => en_passant_left.up_right().0,
+                                        black!() => en_passant_left.down_right().0,
+                                        _ => unreachable!(),
+                                    })
                                     .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(match player_to_move {
-                                    white!() => move_bits << shifts::down!(),
-                                    black!() => move_bits >> shifts::down!(),
-                                    value => unreachable!("{value}"),
                                 })
-                                .expect(Location::failed_from_usize_message()),
-                            });
+                                .is_ok());
                         }
 
-                        if en_passant_left & player_to_move_pawns != 0 {
-                            return Some(Move {
-                                from: Location::try_from(en_passant_left)
-                                    .expect(Location::failed_from_usize_message()),
-                                to: Location::try_from(match player_to_move {
-                                    white!() => move_bits << shifts::down!(),
-                                    black!() => move_bits >> shifts::down!(),
-                                    value => unreachable!("{value}"),
+                        if en_passant_right.intersects_with(&player_to_move_pawns) {
+                            debug_assert!(self
+                                .lookahead
+                                .push_back(Move {
+                                    from: Location::try_from(en_passant_right.0)
+                                        .expect(Location::failed_from_usize_message()),
+                                    to: Location::try_from(match player_to_move {
+                                        white!() => en_passant_left.up_left().0,
+                                        black!() => en_passant_right.down_left().0,
+                                        _ => unreachable!(),
+                                    })
+                                    .expect(Location::failed_from_usize_message())
                                 })
-                                .expect(Location::failed_from_usize_message()),
-                            });
+                                .is_ok());
                         }
 
-                        if let Some(lookahead) = std::mem::take(&mut self.lookahead) {
+                        if let Some(lookahead) = self.lookahead.pop_front() {
                             return Some(lookahead);
                         }
                     }
@@ -1379,54 +1135,89 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
             }
         }
 
-        if let Some(lookahead) = std::mem::take(&mut self.lookahead) {
-            return Some(lookahead);
-        }
-
         while let Some(location) = self.locations.next() {
-            let location_u64 = location.as_u64();
-            println!("Checking for pawn moves on {location:?}");
-            if self.board.pawns[self.board.get_player_to_move().as_index()].0 & location_u64 != 0 {
+            let location_bb = BitBoard(location.as_u64());
+            if self.board.pawns[self.board.get_player_to_move().as_index()]
+                .intersects_with(&location_bb)
+            {
                 match self.board.get_player_to_move() {
                     Player::White => {
-                        let new_location = location_u64 << shifts::down!();
+                        let new_location = location_bb.up();
 
+                        // check for a double-push
                         if location.rank() == Rank::Two {
-                            let new_location_double = new_location << shifts::down!();
-                            if new_location_double != 0 {
-                                self.lookahead = Some(Move {
-                                    from: location,
-                                    to: Location::try_from(new_location_double)
-                                        .expect(Location::failed_from_usize_message()),
-                                });
+                            let new_location_double = new_location.up();
+                            if new_location_double.0 != 0
+                                && !new_location_double.intersects_with(&self.board.mailbox)
+                            {
+                                debug_assert!(self
+                                    .lookahead
+                                    .push_back(Move {
+                                        from: location,
+                                        to: Location::try_from(new_location_double.0)
+                                            .expect(Location::failed_from_usize_message()),
+                                    })
+                                    .is_ok());
                             }
                         }
 
-                        if new_location != 0 {
+                        // check for captures
+                        for capture_square in [location_bb.up_left(), location_bb.up_right()] {
+                            if capture_square.0 != 0
+                                && capture_square.intersects_with(&self.hostiles)
+                            {
+                                debug_assert!(self.lookahead.push_back(Move {
+                                    from: location,
+                                    to: Location::try_from(capture_square.0).expect("Conversion of capture square to location should never fail"),
+                                }).is_ok());
+                            }
+                        }
+
+                        if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox)
+                        {
                             return Some(Move {
                                 from: location,
-                                to: Location::try_from(new_location).unwrap(),
+                                to: Location::try_from(new_location.0).unwrap(),
                             });
                         }
                     }
                     Player::Black => {
-                        let new_location = location_u64 >> shifts::down!();
+                        let new_location = location_bb.down();
 
                         if location.rank() == Rank::Seven {
-                            let new_location_double = new_location >> shifts::down!();
-                            if new_location_double != 0 {
-                                self.lookahead = Some(Move {
-                                    from: location,
-                                    to: Location::try_from(new_location_double)
-                                        .expect(Location::failed_from_usize_message()),
-                                });
+                            let new_location_double = new_location.down();
+                            if new_location_double.0 != 0
+                                && !new_location_double.intersects_with(&self.board.mailbox)
+                            {
+                                debug_assert!(self
+                                    .lookahead
+                                    .push_back(Move {
+                                        from: location,
+                                        to: Location::try_from(new_location_double.0)
+                                            .expect(Location::failed_from_usize_message()),
+                                    })
+                                    .is_ok());
                             }
                         }
 
-                        if new_location != 0 {
+                        // check for captures
+                        for capture_square in [location_bb.down_left(), location_bb.down_right()] {
+                            if capture_square.0 != 0
+                                && capture_square.intersects_with(&self.hostiles)
+                            {
+                                debug_assert!(self.lookahead.push_back(Move {
+                                    from: location,
+                                    to: Location::try_from(capture_square.0).expect("Conversion of capture square to location should never fail"),
+                                }).is_ok());
+                            }
+                        }
+
+                        if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox)
+                        {
                             return Some(Move {
                                 from: location,
-                                to: Location::try_from(new_location).unwrap(),
+                                to: Location::try_from(new_location.0)
+                                    .expect(Location::failed_from_usize_message()),
                             });
                         }
                     }
@@ -1435,12 +1226,66 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
         }
 
         return None;
-        todo!("standard");
     }
 }
 
-struct LegalKnightMovesIterator<'board> {
-    board: &'board Board,
+struct LegalKnightMovesIterator {
+    friendlies: BitBoard,
+    knights: BitBoard,
+    locations: Box<dyn Iterator<Item = Location>>,
+    lookahead: ArrDeque<Move, 8>,
+}
+
+impl LegalKnightMovesIterator {
+    fn new(board: &Board) -> Self {
+        let player_to_move = board.get_player_to_move();
+        Self {
+            friendlies: board.create_mailbox_for_player(player_to_move),
+            knights: board.knights[player_to_move.as_index()].clone(),
+            locations: Box::new(Location::all_locations()),
+            lookahead: ArrDeque::new(),
+        }
+    }
+}
+
+impl Iterator for LegalKnightMovesIterator {
+    type Item = Move;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        println!("{:?}", self.lookahead);
+        if let Some(front) = self.lookahead.pop_front() {
+            return Some(front);
+        }
+
+        while let Some(location) = self.locations.next() {
+            println!("{location:?}");
+            let location_bb = BitBoard(location.as_u64());
+            if self.knights.intersects_with(&location_bb) {
+                let mut iter = location_bb.knight_moves();
+                while let Some(knight_move) = iter.next() {
+                    if self.friendlies.intersects_with(&knight_move) { continue; }
+                    debug_assert!(self
+                        .lookahead
+                        .push_back(Move {
+                            from: location,
+                            to: Location::try_from(knight_move.0)
+                                .expect(Location::failed_from_usize_message()),
+                        })
+                        .is_ok());
+                }
+
+                println!("popping front");
+                if let Some(lookahead) = self.lookahead.pop_front() {
+                    println!("finished popping front");
+                    return Some(lookahead);
+                }
+                println!("finished popping front");
+            }
+        }
+
+        println!("No more knight moves");
+        return None;
+    }
 }
 
 struct LegalBishopMovesIterator<'board> {
@@ -1480,98 +1325,6 @@ impl From<PieceKind> for LegalMovesGeneratorState {
             PieceKind::Rook => LegalMovesGeneratorState::RookGeneration,
             PieceKind::Queen => LegalMovesGeneratorState::QueenGeneration,
             PieceKind::King => LegalMovesGeneratorState::KingGeneration,
-        }
-    }
-}
-
-mod shifts {
-    macro_rules! left {
-        () => {
-            -1
-        };
-    }
-    pub(super) use left;
-
-    macro_rules! right {
-        () => {
-            1
-        };
-    }
-    pub(super) use right;
-
-    macro_rules! up {
-        () => {
-            -8
-        };
-    }
-    pub(super) use up;
-
-    macro_rules! down {
-        () => {
-            8
-        };
-    }
-    pub(super) use down;
-
-    macro_rules! up_left {
-        () => {
-            -9
-        };
-    }
-    pub(super) use up_left;
-
-    macro_rules! up_right {
-        () => {
-            -7
-        };
-    }
-    pub(super) use up_right;
-
-    macro_rules! down_left {
-        () => {
-            7
-        };
-    }
-    pub(super) use down_left;
-
-    macro_rules! down_right {
-        () => {
-            9
-        };
-    }
-    pub(super) use down_right;
-
-    pub(super) fn all() -> [usize; 4] {
-        [down_left!(), down!(), down_right!(), right!()]
-    }
-
-    pub(super) fn all_u32() -> [u32; 4] {
-        [down_left!(), down!(), down_right!(), right!()]
-    }
-
-    pub(super) fn straights() -> [usize; 2] {
-        [down!(), right!()]
-    }
-
-    pub(super) fn diagnoals() -> [usize; 2] {
-        [down_left!(), down_right!()]
-    }
-
-    pub(super) fn knights() -> [usize; 4] {
-        [6, 10, 15, 17]
-    }
-
-    pub(super) fn is_diagonal(shift: usize) -> bool {
-        match shift {
-            down_left!() | down_right!() => true,
-            _ => false,
-        }
-    }
-
-    pub(super) fn is_straight(shift: usize) -> bool {
-        match shift {
-            down!() | right!() => true,
-            _ => false,
         }
     }
 }
