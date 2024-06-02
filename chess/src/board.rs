@@ -1,6 +1,6 @@
 use std::{
     array::{from_fn, IntoIter},
-    iter::{self},
+    iter,
     ops::{Index, IndexMut},
     str::FromStr,
 };
@@ -284,12 +284,14 @@ impl Board {
 
     fn create_mailbox_for_player(&self, player: Player) -> BitBoard {
         let player_index = player.as_index();
-        return BitBoard(self.pawns[player_index].0
-            | self.knights[player_index].0
-            | self.bishops[player_index].0
-            | self.rooks[player_index].0
-            | self.queens[player_index].0
-            | self.kings[player_index].0);
+        return BitBoard(
+            self.pawns[player_index].0
+                | self.knights[player_index].0
+                | self.bishops[player_index].0
+                | self.rooks[player_index].0
+                | self.queens[player_index].0
+                | self.kings[player_index].0,
+        );
     }
 
     fn get_player_to_move(&self) -> Player {
@@ -301,14 +303,6 @@ impl Board {
             Player::White => Player::Black,
             Player::Black => Player::White,
         }
-    }
-
-    fn make_move(&mut self, move_: Move) -> Result<(), IllegalMove> {
-        if let Err(err) = self.classify_move(&move_) {
-            return Err(err);
-        }
-
-        todo!()
     }
 
     fn white_can_castle_kingside(&self) -> bool {
@@ -393,152 +387,6 @@ impl Board {
         return None;
     }
 
-    fn make_move_unchecked(&mut self, move_: Move) -> Result<(), IllegalMove> {
-        todo!();
-    }
-
-    fn is_legal_move(&self, move_: &Move) -> bool {
-        self.classify_move(&move_).is_ok()
-    }
-
-    fn classify_move(&self, move_: &Move) -> Result<MoveKind, IllegalMove> {
-        if move_.to == move_.from {
-            return Ok(MoveKind::NonMove);
-        }
-
-        let from_bits = move_.from.as_u64();
-        let to_bits = move_.to.as_u64();
-
-        if self.mailbox.0 & from_bits == 0 {
-            return Err(IllegalMove::NoPieceAtFromLocation);
-        }
-
-        match self.get_player_to_move() {
-            Player::White => {
-                let pawn_square = self.pawns[white!()].0 & from_bits;
-                if pawn_square != 0 {
-                    let single_push = pawn_square << 8;
-                    debug_assert!(
-                        single_push != 0,
-                        "If this fails, it means we miscalculated a promotion"
-                    );
-
-                    // push square is occupied
-                    if (self.mailbox.0 & single_push) != 0 {
-                        return Err(IllegalMove::IllegalMove);
-                    }
-
-                    // If the pawn is on rank 2, check for double push
-                    if (pawn_square | Rank::two_bit_filter()) != 0 {
-                        let double_push = single_push << 8;
-                        if double_push == to_bits {
-                            // double push square is occupied
-                            if (self.mailbox.0 | double_push) != 0 {
-                                return Err(IllegalMove::IllegalMove);
-                            } else {
-                                // 1 is horizontal from square, 7 and 9 are diagonals and 8 is vertical
-                                for shift in [1, 7, 8, 9] {}
-                                if self.causes_check_for_white(move_) {
-                                    return Err(IllegalMove::Check);
-                                }
-                                return Ok(MoveKind::Normal);
-                            }
-                        }
-                    }
-
-                    for shift in [7, 9] {
-                        let capture_square = pawn_square << shift;
-                        if (capture_square | self.mailbox.0) != 0 {
-                            if self.causes_check_for_white(move_) {
-                                return Err(IllegalMove::Check);
-                            }
-                            return Ok(MoveKind::Pawn(PawnMoveKind::Capture));
-                        }
-                    }
-
-                    return Err(IllegalMove::IllegalMove);
-                }
-
-                let knight_square = self.knights[white!()].0 & from_bits;
-                if self.knights[white!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.bishops[white!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.rooks[white!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.queens[white!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.kings[white!()].0 & from_bits != 0 {
-                    todo!()
-                } else {
-                    return Err(IllegalMove::PieceOwnedByOtherPlayer);
-                }
-            }
-            Player::Black => {
-                if self.pawns[black!()].0 & from_bits != 0 {
-                    debug_assert!(
-                        ((self.pawns[black!()].0 & from_bits) >> 8) != 0,
-                        "If this fails, it means we miscalculated a promotion"
-                    );
-                    todo!()
-                } else if self.knights[black!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.bishops[black!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.rooks[black!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.queens[black!()].0 & from_bits != 0 {
-                    todo!()
-                } else if self.kings[black!()].0 & from_bits != 0 {
-                    todo!()
-                } else {
-                    return Err(IllegalMove::PieceOwnedByOtherPlayer);
-                }
-            }
-        }
-    }
-
-    fn causes_check_for_white(&self, move_: &Move) -> bool {
-        let mut ray_casters: [u64; 8] = std::array::from_fn(|_| move_.from.as_u64());
-        let mut shift_direction = 0;
-        let mut shift_for_check = 0;
-        let mut could_cause_check = false;
-        for _ in 0..8 {
-            // 1 is horizontal from square, 7 and 9 are diagonals and 8 is vertical
-            for (i, shift) in [1, 7, 8, 9].into_iter().enumerate() {
-                ray_casters[i] = ray_casters[i] << shift;
-                if (ray_casters[i] & self.kings[white!()].0) != 0 {
-                    shift_for_check = shift;
-                    shift_direction = -1;
-                    could_cause_check = true;
-                    break;
-                }
-            }
-            if could_cause_check {
-                break;
-            }
-
-            for (i, shift) in [1, 7, 8, 9].into_iter().enumerate() {
-                let index = 4 + i;
-                ray_casters[index] = ray_casters[index] >> shift;
-                if (ray_casters[index] & self.kings[white!()].0) != 0 {
-                    shift_for_check = shift;
-                    shift_direction = 1;
-                    could_cause_check = true;
-                    break;
-                }
-            }
-            if could_cause_check {
-                break;
-            }
-        }
-
-        if !could_cause_check {
-            return false;
-        }
-        todo!();
-    }
-
     fn at(&self, location: Location) -> Option<Piece> {
         let location_bits = location.as_u64();
 
@@ -617,10 +465,6 @@ impl Board {
     pub fn legal_moves<'a>(&'a self) -> impl Iterator<Item = Move> + 'a {
         LegalMovesIterator::for_board(self)
     }
-
-    fn legal_king_moves<'a>(&'a self) -> impl Iterator<Item = Move> + 'a {
-        LegalKingMovesIterator::new(self, self.get_player_to_move())
-    }
 }
 
 impl Default for Board {
@@ -652,9 +496,9 @@ impl<'board> LegalMovesIterator<'board> {
             is_check: None,
             pawn_moves_iterator: Some(LegalPawnMovesIterator::new(board)),
             knight_moves_iterator: Some(LegalKnightMovesIterator::new(board)),
-            bishop_moves_iterator: Some(LegalBishopMovesIterator { board }),
-            rook_moves_iterator: Some(LegalRookMovesIterator { board }),
-            queen_moves_iterator: Some(LegalQueenMovesIterator { board }),
+            bishop_moves_iterator: Some(LegalBishopMovesIterator::new(board)),
+            rook_moves_iterator: Some(LegalRookMovesIterator::new(board)),
+            queen_moves_iterator: Some(LegalQueenMovesIterator::new(board)),
             king_moves_iterator: LegalKingMovesIterator::new(board, player_to_move),
             king_moves_iterator_finished: false,
             check_blocking_squares: None,
@@ -668,9 +512,9 @@ impl<'board> LegalMovesIterator<'board> {
             is_check: None,
             pawn_moves_iterator: Some(LegalPawnMovesIterator::new(board)),
             knight_moves_iterator: Some(LegalKnightMovesIterator::new(board)),
-            bishop_moves_iterator: Some(LegalBishopMovesIterator { board }),
-            rook_moves_iterator: Some(LegalRookMovesIterator { board }),
-            queen_moves_iterator: Some(LegalQueenMovesIterator { board }),
+            bishop_moves_iterator: Some(LegalBishopMovesIterator::new(board)),
+            rook_moves_iterator: Some(LegalRookMovesIterator::new(board)),
+            queen_moves_iterator: Some(LegalQueenMovesIterator::new(board)),
             king_moves_iterator: LegalKingMovesIterator::new(&board, piece.player()),
             // We only want to iterate through king moves if the target piece is a king
             king_moves_iterator_finished: piece.kind() != PieceKind::King,
@@ -725,21 +569,6 @@ impl<'board> LegalMovesIterator<'board> {
             Player::Black => self.board.kings[black!()].0,
         };
     }
-
-    fn is_check(&mut self) -> bool {
-        match self.is_check {
-            None => {
-                println!("Starting is_check LegalMovesIterator");
-                let checked = self
-                    .king_moves_iterator
-                    .is_check(self.player, self.board.kings[self.player.as_index()].0);
-                println!("{checked}");
-                self.is_check = Some(checked);
-                checked
-            }
-            Some(is_check) => is_check,
-        }
-    }
 }
 
 impl<'board> Iterator for LegalMovesIterator<'board> {
@@ -774,7 +603,6 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         // let is_check = self.king_moves_iterator.is_check(self.player, self.board.kings[self.player.as_index()].0);
         // println!("Finished calculating is_check: {is_check}");
 
-        println!("Calculating pawn moves");
         if let Some(pawn_moves) = &mut self.pawn_moves_iterator {
             let next_pawn_move = pawn_moves.next();
             if next_pawn_move.is_some() {
@@ -784,7 +612,6 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             }
         }
 
-        println!("Calculating knight moves");
         if let Some(knight_moves) = &mut self.knight_moves_iterator {
             let next_knight_move = knight_moves.next();
             if next_knight_move.is_some() {
@@ -794,7 +621,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             }
         }
 
-        /*if let Some(bishop_moves) = &mut self.bishop_moves_iterator {
+        if let Some(bishop_moves) = &mut self.bishop_moves_iterator {
             let next_bishop_move = bishop_moves.next();
             if next_bishop_move.is_some() {
                 return next_bishop_move;
@@ -821,10 +648,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             }
         }
 
-        return None;*/
-        println!("Done calculating moves");
         return None;
-        todo!();
     }
 }
 
@@ -871,7 +695,6 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("Starting legal captures .next()");
         self.board.assert_board_integrity();
 
         // lazy calculate our mailboxes of pieces. These help
@@ -913,7 +736,6 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                 Some((attacking_pieces_mailbox, defending_pieces_mailbox));
         }
 
-        println!("Calculating knight moves");
         if !self.knight_moves_is_done {
             while let Some(attacking_knight_square) = self.knight_moves.next() {
                 if self.board.knights[self.player_to_move].intersects_with_u64(self.target_square) {
@@ -925,11 +747,9 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     });
                 }
             }
-            println!("Done with knight moves");
             self.knight_moves_is_done = true;
         }
 
-        println!("Calculating bishop moves");
         if !self.diagonal_moves_is_done {
             while let Some(diagonal_move) = self.diagonal_moves.next() {
                 if self.board.bishops[self.player_to_move].intersects_with(&diagonal_move)
@@ -947,7 +767,6 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
             self.diagonal_moves_is_done = true;
         }
 
-        println!("Calculating rook moves");
         if !self.straight_moves_is_done {
             while let Some(straight_move) = self.straight_moves.next() {
                 if self.board.rooks[self.player_to_move].intersects_with(&straight_move)
@@ -965,7 +784,6 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
             self.straight_moves_is_done = true;
         }
 
-        println!("Finished calculating moves");
         return None;
     }
 }
@@ -1027,11 +845,9 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                 continue;
             }
 
-            println!("Starting is_check LegalKingMovesIterator");
             if self.is_check(self.player, self.king_bitboard.0) {
                 continue;
             }
-            println!("finished is_check");
 
             return Some(Move {
                 from: Location::try_from(king_bitboard.0)
@@ -1252,18 +1068,18 @@ impl Iterator for LegalKnightMovesIterator {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("{:?}", self.lookahead);
         if let Some(front) = self.lookahead.pop_front() {
             return Some(front);
         }
 
         while let Some(location) = self.locations.next() {
-            println!("{location:?}");
             let location_bb = BitBoard(location.as_u64());
             if self.knights.intersects_with(&location_bb) {
                 let mut iter = location_bb.knight_moves();
                 while let Some(knight_move) = iter.next() {
-                    if self.friendlies.intersects_with(&knight_move) { continue; }
+                    if self.friendlies.intersects_with(&knight_move) {
+                        continue;
+                    }
                     debug_assert!(self
                         .lookahead
                         .push_back(Move {
@@ -1274,16 +1090,12 @@ impl Iterator for LegalKnightMovesIterator {
                         .is_ok());
                 }
 
-                println!("popping front");
                 if let Some(lookahead) = self.lookahead.pop_front() {
-                    println!("finished popping front");
                     return Some(lookahead);
                 }
-                println!("finished popping front");
             }
         }
 
-        println!("No more knight moves");
         return None;
     }
 }
@@ -1292,46 +1104,89 @@ struct LegalBishopMovesIterator<'board> {
     board: &'board Board,
 }
 
+impl<'board> LegalBishopMovesIterator<'board> {
+    fn new(board: &'board Board) -> Self {
+        Self { board }
+    }
+}
+
+impl<'board> Iterator for LegalBishopMovesIterator<'board> {
+    type Item = Move;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        return None;
+        todo!();
+    }
+}
+
 struct LegalRookMovesIterator<'board> {
     board: &'board Board,
 }
 
-struct LegalQueenMovesIterator<'board> {
-    board: &'board Board,
-}
-
-enum LegalMovesGeneratorState {
-    None,
-    PawnGeneration,
-    KnightGeneration,
-    BishopGeneration,
-    RookGeneration,
-    QueenGeneration,
-    KingGeneration,
-}
-
-impl From<Piece> for LegalMovesGeneratorState {
-    fn from(value: Piece) -> Self {
-        Self::from(value.kind())
+impl<'board> LegalRookMovesIterator<'board> {
+    fn new(board: &'board Board) -> Self {
+        Self { board }
     }
 }
 
-impl From<PieceKind> for LegalMovesGeneratorState {
-    fn from(value: PieceKind) -> Self {
-        match value {
-            PieceKind::Pawn => LegalMovesGeneratorState::PawnGeneration,
-            PieceKind::Knight => LegalMovesGeneratorState::KnightGeneration,
-            PieceKind::Bishop => LegalMovesGeneratorState::BishopGeneration,
-            PieceKind::Rook => LegalMovesGeneratorState::RookGeneration,
-            PieceKind::Queen => LegalMovesGeneratorState::QueenGeneration,
-            PieceKind::King => LegalMovesGeneratorState::KingGeneration,
+impl<'board> Iterator for LegalRookMovesIterator<'board> {
+    type Item = Move;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        return None;
+        todo!();
+    }
+}
+
+struct LegalQueenMovesIterator<'board> {
+    bishop_moves: LegalBishopMovesIterator<'board>,
+    bishop_moves_finished: bool,
+    rook_moves: LegalRookMovesIterator<'board>,
+    rook_moves_finished: bool,
+}
+
+impl<'board> LegalQueenMovesIterator<'board> {
+    fn new(board: &'board Board) -> Self {
+        Self {
+            bishop_moves: LegalBishopMovesIterator::new(board),
+            bishop_moves_finished: false,
+            rook_moves: LegalRookMovesIterator::new(board),
+            rook_moves_finished: false,
         }
+    }
+}
+
+impl<'board> Iterator for LegalQueenMovesIterator<'board> {
+    type Item = Move;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.bishop_moves_finished {
+            let next = self.bishop_moves.next();
+            if next.is_some() {
+                return next;
+            } else {
+                self.bishop_moves_finished = true;
+            }
+        }
+
+        if !self.rook_moves_finished {
+            let next = self.rook_moves.next();
+            if next.is_some() {
+                return next;
+            } else {
+                self.rook_moves_finished = true;
+            }
+        }
+
+        return None;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
+    use crate::board::LegalKingMovesIterator;
 
     use super::Board;
 
@@ -1340,7 +1195,8 @@ mod tests {
         let board =
             Board::from_str("RNBKQBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbkqbnr w KQkq - 0 1").unwrap();
 
-        let legal_king_moves = board.legal_king_moves().collect::<Vec<_>>();
+        let legal_king_moves =
+            LegalKingMovesIterator::new(&board, board.get_player_to_move()).collect::<Vec<_>>();
         assert_eq!(0, legal_king_moves.len());
     }
 }
