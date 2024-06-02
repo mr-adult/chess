@@ -25,6 +25,10 @@ html {
     z-index: 100;
 }
 
+.legal_move_square {
+    background-color: darkgoldenrod !important;
+}
+
 .light {
     background-color: lightgray;
 }
