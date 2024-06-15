@@ -300,6 +300,7 @@ dependencies = [
  "http",
  "rand",
  "serde",
+ "serde_derive",
  "sha2",
  "sqlx",
  "tokio",
