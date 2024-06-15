@@ -48,12 +48,7 @@ where
     T: Default,
 {
     fn default() -> Self {
-        Self {
-            items: from_fn(|_| MaybeUninit::uninit()),
-            front: 0,
-            back: 0,
-            len: 0,
-        }
+        Self::new()
     }
 }
 
@@ -92,6 +87,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
     }
 
     pub fn clear(&mut self) {
+        unsafe { self.drop_elements(); }
         self.back = self.front;
         self.len = 0;
     }
@@ -117,7 +113,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
         }
         let maybe_uninit = &self.items[self.front];
         let value = unsafe { maybe_uninit.assume_init_ref() };
-        return Some(value)
+        return Some(value);
     }
 
     pub fn push_front(&mut self, item: T) -> Result<(), ()> {
@@ -134,7 +130,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
         self.len += 1;
         self.items[self.front] = MaybeUninit::new(item);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn pop_back(&mut self) -> Option<T> {
@@ -158,7 +154,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
         }
         let maybe_uninit = &self.items[self.back - 1];
         let value = unsafe { maybe_uninit.assume_init_ref() };
-        return Some(value)
+        return Some(value);
     }
 
     pub fn push_back(&mut self, item: T) -> Result<(), ()> {
@@ -200,10 +196,11 @@ impl<T, const N: usize> ArrDeque<T, N> {
     fn increment_inner_index(&self, index: usize) -> usize {
         (index + 1) % self.items.len()
     }
-}
 
-impl<T, const N: usize> Drop for ArrDeque<T, N> {
-    fn drop(&mut self) {
+    unsafe fn drop_elements(&mut self) {
+        if self.len() == 0 {
+            return;
+        }
         let mut index = self.front;
         loop {
             if !self.is_in_bounds(index) {
@@ -214,6 +211,12 @@ impl<T, const N: usize> Drop for ArrDeque<T, N> {
             }
             index = (index + 1) % self.items.len();
         }
+    }
+}
+
+impl<T, const N: usize> Drop for ArrDeque<T, N> {
+    fn drop(&mut self) {
+        unsafe { self.drop_elements(); }
     }
 }
 
