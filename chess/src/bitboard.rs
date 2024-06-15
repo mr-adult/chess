@@ -167,7 +167,8 @@ impl KnightMovesIterator {
                 KnightDirection::Downx2Left,
                 KnightDirection::DownRightx2,
                 KnightDirection::Downx2Right,
-            ].into_iter(),
+            ]
+            .into_iter(),
         }
     }
 }
@@ -225,6 +226,14 @@ impl DiagonalMovesIterator {
             }),
         }
     }
+
+    pub(crate) fn next_direction(&mut self) -> bool {
+        self.directions_to_check.pop_front();
+        if self.previous.0 != self.original.0 {
+            self.previous = self.original.clone();
+        }
+        return self.directions_to_check.len() > 0;
+    }
 }
 
 impl Iterator for DiagonalMovesIterator {
@@ -240,12 +249,12 @@ impl Iterator for DiagonalMovesIterator {
             }
 
             if self.previous.0 == 0 {
-                self.directions_to_check.pop_front();
-                self.previous = self.original.clone();
+                self.next_direction();
             } else {
                 return Some(self.previous.clone());
             }
         }
+
         return None;
     }
 }

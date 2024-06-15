@@ -1,3 +1,5 @@
+use std::vec::IntoIter;
+
 use crate::{file::File, rank::Rank};
 use serde_derive::Serialize;
 
@@ -19,6 +21,118 @@ impl Location {
 
     pub const fn failed_from_usize_message() -> &'static str {
         "Expected only one bit to be populated."
+    }
+
+    pub fn from_bitboard(bitboard: u64) -> IntoIter<Location> {
+        if bitboard & u64::MAX == 0 {
+            return Vec::new().into_iter();
+        }
+
+        let mut ranks = Vec::with_capacity(8); // Pre-allocate for the worst case (1 piece per rank).
+        if bitboard & Rank::one_through_four_bit_filter() != 0 {
+            if bitboard & Rank::one_or_two_bit_filter() != 0 {
+                if bitboard & Rank::one_bit_filter() != 0 {
+                    ranks.push(Rank::One);
+                }
+                if bitboard & Rank::two_bit_filter() != 0 {
+                    ranks.push(Rank::Two);
+                }
+            }
+            if bitboard & Rank::three_or_four_bit_filter() != 0 {
+                if bitboard & Rank::three_bit_filter() != 0 {
+                    ranks.push(Rank::Three);
+                }
+                if bitboard & Rank::four_bit_filter() != 0 {
+                    ranks.push(Rank::Four);
+                }
+            }
+        }
+        if bitboard & Rank::five_through_eight_bit_filter() != 0 {
+            if bitboard & Rank::five_or_six_bit_filter() != 0 {
+                if bitboard & Rank::five_bit_filter() != 0 {
+                    ranks.push(Rank::Five);
+                }
+                if bitboard & Rank::six_bit_filter() != 0 {
+                    ranks.push(Rank::Six);
+                }
+            }
+            if bitboard & Rank::seven_or_eight_bit_filter() != 0 {
+                if bitboard & Rank::seven_bit_filter() != 0 {
+                    ranks.push(Rank::Seven);
+                }
+                if bitboard & Rank::eight_bit_filter() != 0 {
+                    ranks.push(Rank::Eight);
+                }
+            }
+        }
+
+        // pre-allocate for the expected worst case (8 pawns)
+        let mut locations = Vec::with_capacity(8);
+        for rank in ranks {
+            let filtered_to_rank = bitboard & rank.bit_filter();
+            if filtered_to_rank & File::a_through_d_bit_filter() != 0 {
+                if filtered_to_rank & File::a_or_b_bit_filter() != 0 {
+                    if filtered_to_rank & File::a_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::a,
+                            rank,
+                        });
+                    }
+                    if filtered_to_rank & File::b_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::b,
+                            rank,
+                        });
+                    }
+                }
+                if filtered_to_rank & File::c_or_d_bit_filter() != 0 {
+                    if filtered_to_rank & File::c_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::c,
+                            rank,
+                        });
+                    }
+                    if filtered_to_rank & File::d_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::d,
+                            rank,
+                        });
+                    }
+                }
+            }
+            if filtered_to_rank & File::e_through_h_bit_filter() != 0 {
+                if filtered_to_rank & File::e_or_f_bit_filter() != 0 {
+                    if filtered_to_rank & File::e_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::e,
+                            rank,
+                        });
+                    }
+                    if filtered_to_rank & File::f_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::f,
+                            rank,
+                        });
+                    }
+                }
+                if filtered_to_rank & File::g_or_h_bit_filter() != 0 {
+                    if filtered_to_rank & File::g_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::g,
+                            rank,
+                        });
+                    }
+                    if filtered_to_rank & File::h_bit_filter() != 0 {
+                        locations.push(Location {
+                            file: File::h,
+                            rank,
+                        });
+                    }
+                }
+            }
+        }
+
+        return locations.into_iter();
     }
 
     pub const fn file(&self) -> File {

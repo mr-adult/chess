@@ -84,6 +84,36 @@ impl File {
     }
 
     #[inline]
+    pub const fn a_through_d_bit_filter() -> u64 {
+        Self::a_or_b_bit_filter() | Self::c_or_d_bit_filter()
+    }
+
+    #[inline]
+    pub const fn e_through_h_bit_filter() -> u64 {
+        Self::e_or_f_bit_filter() | Self::g_or_h_bit_filter()
+    }
+
+    #[inline]
+    pub const fn a_or_b_bit_filter() -> u64 {
+        Self::a_bit_filter() | Self::b_bit_filter()
+    }
+
+    #[inline]
+    pub const fn c_or_d_bit_filter() -> u64 {
+        Self::c_bit_filter() | Self::d_bit_filter()
+    }
+
+    #[inline]
+    pub const fn e_or_f_bit_filter() -> u64 {
+        Self::e_bit_filter() | Self::f_bit_filter()
+    }
+
+    #[inline]
+    pub const fn g_or_h_bit_filter() -> u64 {
+        Self::g_bit_filter() | Self::h_bit_filter()
+    }
+
+    #[inline]
     pub const fn a_bit_filter() -> u64 {
         0x01_01_01_01_01_01_01_01
     }

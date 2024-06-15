@@ -23,6 +23,7 @@ async fn get_legal_moves_handler(
         println!("{:?}", move_);
         result.push(move_);
     }
+    println!("done");
 
     Ok(Json(result))
 }
