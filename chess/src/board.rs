@@ -1115,6 +1115,12 @@ impl<'board> LegalBishopMovesIterator<'board> {
             hostiles,
         }
     }
+
+    fn new_for_bitboard(board: &'board Board, bitboard: &'board BitBoard) -> Self {
+        let mut result = Self::new(board);
+        result.bishop_locations = Location::from_bitboard(bitboard.0);
+        result
+    }
 }
 
 impl<'board> Iterator for LegalBishopMovesIterator<'board> {
@@ -1193,6 +1199,12 @@ impl<'board> LegalRookMovesIterator<'board> {
             hostiles,
         }
     }
+
+    fn new_for_bitboard(board: &'board Board, bitboard: &BitBoard) -> Self {
+        let mut result = Self::new(board);
+        result.rook_locations = Location::from_bitboard(bitboard.0);
+        result
+    }
 }
 
 impl<'board> Iterator for LegalRookMovesIterator<'board> {
@@ -1249,10 +1261,12 @@ struct LegalQueenMovesIterator<'board> {
 
 impl<'board> LegalQueenMovesIterator<'board> {
     fn new(board: &'board Board) -> Self {
+        let player_to_move = board.get_player_to_move().as_index();
+        let queen_bb = &board.queens[player_to_move];
         Self {
-            bishop_moves: LegalBishopMovesIterator::new(&board),
+            bishop_moves: LegalBishopMovesIterator::new_for_bitboard(&board, queen_bb),
             bishop_moves_finished: false,
-            rook_moves: LegalRookMovesIterator::new(board),
+            rook_moves: LegalRookMovesIterator::new_for_bitboard(&board, queen_bb),
             rook_moves_finished: false,
         }
     }
