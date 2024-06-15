@@ -288,13 +288,18 @@ impl StraightMovesIterator {
             }),
         }
     }
+
+    pub(crate) fn next_direction(&mut self) -> bool {
+        self.directions_to_check.pop_front();
+        self.previous = self.original.clone();
+        return self.directions_to_check.len() > 0;
+    }
 }
 
 impl Iterator for StraightMovesIterator {
     type Item = BitBoard;
 
     fn next(&mut self) -> Option<Self::Item> {
-        return None;
         while let Some(direction) = self.directions_to_check.peek_front() {
             match *direction {
                 StraightDirection::Up => self.previous = self.previous.up(),
@@ -304,8 +309,7 @@ impl Iterator for StraightMovesIterator {
             }
 
             if self.previous.0 == 0 {
-                self.directions_to_check.pop_front();
-                self.previous = self.original.clone();
+                self.next_direction();
             } else {
                 return Some(self.previous.clone());
             }
