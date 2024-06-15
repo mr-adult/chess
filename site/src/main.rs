@@ -9,7 +9,7 @@ use http::Method;
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors::{Any, CorsLayer}, services::ServeDir};
 
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{postgres::PgPoolOptions, PgPool, Postgres};
 
 mod api;
 mod auth;
@@ -29,6 +29,46 @@ async fn main() {
     // First, parse the .env file for our environment setup.
     dotenvy::dotenv().ok();
 
+    // let pool = start_db().await;
+
+    // Set up the routes for our application
+    let app = Router::new()
+        .route("/", get(home))
+        .route("/login", post(auth::login_handler))
+        .nest_service("/api", api::create_api_router())
+        .nest_service("/styles", ServeDir::new("src/styles"))
+        .nest_service("/scripts", ServeDir::new("src/scripts"))
+        .layer(
+            // Add CORS so it doesn't block our requests from the browser
+            CorsLayer::new()
+                .allow_methods([Method::GET, Method::POST])
+                .allow_origin(Any),
+        )
+        .layer(CookieManagerLayer::new())
+        // Attach our connection pool to every endpoint so the endpoints can query the DB.
+        .with_state(AppState {
+            // pgpool: pool
+        });
+
+    // Bind to port 8080
+    let listener = tokio::net::TcpListener::bind("[::]:8080")
+        .await
+        .unwrap_or_else(|err| panic!("Failed to initialize TCP listener. Error: \n{}", err));
+
+    // Serve is an infinite async function, so we have to report that we're listening before awaiting.
+    println!("Now listening on port 8080");
+    axum::serve(listener, app)
+        .await
+        .unwrap_or_else(|err| panic!("Failed to start app. Error: \n{}", err));
+}
+
+#[derive(Clone)] // This will be cloned per-request, so no expensive to copy data should be introduced here.
+pub(crate) struct AppState {
+    // pub(crate) pgpool: PgPool
+}
+
+#[allow(unused)]
+async fn start_db() -> PgPool {
     // We create a single connection pool for SQLx that's shared across the whole application.
     // This saves us from opening a new connection for every API call, which is wasteful.
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -50,40 +90,7 @@ async fn main() {
         .await
         .unwrap_or_else(|err| panic!("Failed to migrate the database. Error: \n{}", err));
 
-    // Set up the routes for our application
-    let app = Router::new()
-        .route("/", get(home))
-        .route("/login", post(auth::login_handler))
-        .nest_service("/api", api::create_api_router())
-        .nest_service("/styles", ServeDir::new("src/styles"))
-        .nest_service("/scripts", ServeDir::new("src/scripts"))
-        .layer(
-            // Add CORS so it doesn't block our requests from the browser
-            CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST])
-                .allow_origin(Any),
-        )
-        .layer(CookieManagerLayer::new())
-        // Attach our connection pool to every endpoint so the endpoints can query the DB.
-        .with_state(AppState {
-            pgpool: pool
-        });
-
-    // Bind to port 8080
-    let listener = tokio::net::TcpListener::bind("[::]:8080")
-        .await
-        .unwrap_or_else(|err| panic!("Failed to initialize TCP listener. Error: \n{}", err));
-
-    // Serve is an infinite async function, so we have to report that we're listening before awaiting.
-    println!("Now listening on port 8080");
-    axum::serve(listener, app)
-        .await
-        .unwrap_or_else(|err| panic!("Failed to start app. Error: \n{}", err));
-}
-
-#[derive(Clone)] // This will be cloned per-request, so no expensive to copy data should be introduced here.
-pub(crate) struct AppState {
-    pub(crate) pgpool: PgPool
+    return pool;
 }
 
 async fn home(state: State<AppState>) -> Html<String> {
