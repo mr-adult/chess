@@ -12,21 +12,12 @@ use chess_parsers::{parse_fen, BoardLayout, FenErr};
 use crate::{
     arr_deque::ArrDeque,
     bitboard::{BitBoard, DiagonalMovesIterator, KnightMovesIterator, StraightMovesIterator},
-    chess_move::{IllegalMove, MoveKind, PawnMoveKind},
     Move,
 };
 
 #[derive(Debug)]
 pub struct ErgonomicBoard {
     pieces: [[Option<Piece>; 8]; 8],
-}
-
-impl ErgonomicBoard {
-    fn new() -> Self {
-        Self {
-            pieces: from_fn(|_| from_fn(|_| None)),
-        }
-    }
 }
 
 impl Index<Location> for ErgonomicBoard {
@@ -179,12 +170,7 @@ impl ToString for Board {
         }
 
         result.push(' ');
-        let starting_player = self.starting_position.player_to_move();
-        if self.history.len() % 2 == 0 {
-            result.push(starting_player.as_char());
-        } else {
-            result.push(starting_player.other_player().as_char());
-        }
+        result.push(self.get_player_to_move().as_char());
 
         result.push(' ');
         let mut any_castling_allowed = false;
@@ -262,8 +248,13 @@ impl Board {
                 }
 
                 if bitboard_1.0 & bitboard_2.0 != 0 {
+                    let locations = Location::from_bitboard(bitboard_1.0 & bitboard_2.0)
+                        .map(|loc| format!("{:?}", loc))
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     panic!(
-                        "Found conflicting bitboards at indexes {i} and {j}. {:?}",
+                        "Found conflicting bitboards at indexes {i} and {j}. Locations of contention: {}. Board: {:?}",
+                        locations,
                         self
                     );
                 }
@@ -296,13 +287,17 @@ impl Board {
     }
 
     fn get_player_to_move(&self) -> Player {
-        if self.history.len() & 1 == 0 {
+        if self.history.len() % 2 == 0 {
             return self.first_player_to_move;
+        } else {
+            return self.first_player_to_move.other_player();
         }
+    }
 
-        match self.first_player_to_move {
-            Player::White => Player::Black,
-            Player::Black => Player::White,
+    fn player_can_castle_kingside(&self, player: &Player) -> bool {
+        match player {
+            Player::Black => self.black_can_castle_kingside(),
+            Player::White => self.white_can_castle_kingside(),
         }
     }
 
@@ -326,6 +321,13 @@ impl Board {
             move_.from == Location::new(File::e, Rank::Eight)
                 || move_.from == Location::new(File::h, Rank::Eight)
         });
+    }
+
+    fn player_can_castle_queenside(&self, player: &Player) -> bool {
+        match player {
+            Player::Black => self.black_can_castle_queenside(),
+            Player::White => self.white_can_castle_queenside(),
+        }
     }
 
     fn white_can_castle_queenside(&self) -> bool {
@@ -370,11 +372,14 @@ impl Board {
                 if let PieceKind::Pawn = last_moved.kind() {
                     // It may not be necessary to check the files, but it is safer.
                     if last_move.to.file() == last_move.from.file()
-                        && last_move.to.rank().as_int() - last_move.from.rank().as_int() == 2
+                        && (last_move.to.rank().as_int() - last_move.from.rank().as_int()).abs()
+                            == 2
                     {
                         let file = last_move.to.file();
-                        let rank = last_move.from.rank().as_int() + last_move.to.rank().as_int()
-                            - last_move.from.rank().as_int();
+                        let rank = match last_moved.player() {
+                            Player::White => Rank::Three,
+                            Player::Black => Rank::Six,
+                        };
                         let rank = Rank::try_from(rank)
                             .expect("Integrity issue: as_int() should always be re-parsable");
                         return Some(Location::new(file, rank));
@@ -390,6 +395,13 @@ impl Board {
 
     fn at(&self, location: Location) -> Option<Piece> {
         let location_bits = location.as_u64();
+
+        if location_bits == 0 {
+            return None;
+        }
+        if location_bits & self.mailbox.0 == 0 {
+            return None;
+        }
 
         // pawns are most common, so check them first
         if self.pawns[white!()].0 & location_bits != 0 {
@@ -466,6 +478,99 @@ impl Board {
     pub fn legal_moves<'a>(&'a self) -> impl Iterator<Item = Move> + 'a {
         LegalMovesIterator::for_board(self)
     }
+
+    pub fn make_move(&mut self, move_: Move) -> Result<(), ()> {
+        if !self.legal_moves().any(|legal_move| legal_move == move_) {
+            return Err(());
+        }
+
+        match self.at(move_.from) {
+            None => Err(()),
+            Some(piece_to_move) => {
+                let player_to_move = piece_to_move.player();
+                let to = move_.to.as_u64();
+
+                let en_passant_target = self.en_passant_target_square();
+                let capture_to =
+                    if en_passant_target.is_some() && en_passant_target.unwrap() == move_.to {
+                        let en_passant_target = en_passant_target.unwrap();
+                        let real_pawn_location;
+                        match player_to_move {
+                            Player::Black => {
+                                real_pawn_location = BitBoard(en_passant_target.as_u64()).up();
+                            }
+                            Player::White => {
+                                real_pawn_location = BitBoard(en_passant_target.as_u64()).down();
+                            }
+                        }
+                        real_pawn_location.0
+                    } else {
+                        to
+                    };
+
+                if let Some(captured_piece) = self
+                    .at(Location::try_from(capture_to)
+                        .expect(Location::failed_from_usize_message()))
+                {
+                    let opponent = captured_piece.player().as_index();
+                    match captured_piece.kind() {
+                        PieceKind::Pawn => {
+                            self.pawns[opponent].0 ^= capture_to;
+                        }
+                        PieceKind::Knight => {
+                            self.knights[opponent].0 ^= capture_to;
+                        }
+                        PieceKind::Bishop => {
+                            self.bishops[opponent].0 ^= capture_to;
+                        }
+                        PieceKind::Rook => {
+                            self.rooks[opponent].0 ^= capture_to;
+                        }
+                        PieceKind::Queen => {
+                            self.queens[opponent].0 ^= capture_to;
+                        }
+                        PieceKind::King => {
+                            self.kings[opponent].0 ^= capture_to;
+                        }
+                    }
+                }
+
+                let player = player_to_move.as_index();
+                let from = move_.from.as_u64();
+
+                match piece_to_move.kind() {
+                    PieceKind::Pawn => {
+                        self.pawns[player].0 ^= from;
+                        self.pawns[player].0 ^= to;
+                    }
+                    PieceKind::Knight => {
+                        self.knights[player].0 ^= from;
+                        self.knights[player].0 ^= to;
+                    }
+                    PieceKind::Bishop => {
+                        self.bishops[player].0 ^= from;
+                        self.bishops[player].0 ^= to;
+                    }
+                    PieceKind::Rook => {
+                        self.rooks[player].0 ^= from;
+                        self.rooks[player].0 ^= to;
+                    }
+                    PieceKind::Queen => {
+                        self.queens[player].0 ^= from;
+                        self.queens[player].0 ^= to;
+                    }
+                    PieceKind::King => {
+                        self.kings[player].0 ^= from;
+                        self.kings[player].0 ^= to;
+                    }
+                }
+
+                self.history.push(move_);
+                self.update_mailbox();
+                return Ok(());
+            }
+        }
+    }
 }
 
 impl Default for Board {
@@ -518,32 +623,18 @@ impl<'board> LegalMovesIterator<'board> {
     /// moving the friendly piece will result in a check. These moves
     /// are included.
     fn calculate_check_blocking_squares(&mut self) -> () {
-        let white_piece_positions = self.board.pawns[white!()].0
-            | self.board.knights[white!()].0
-            | self.board.bishops[white!()].0
-            | self.board.rooks[white!()].0
-            | self.board.queens[white!()].0
-            | self.board.kings[white!()].0;
-
-        let black_piece_positions = self.board.pawns[black!()].0
-            | self.board.knights[black!()].0
-            | self.board.bishops[black!()].0
-            | self.board.rooks[black!()].0
-            | self.board.queens[black!()].0
-            | self.board.kings[black!()].0;
-
         let defending_piece_mailbox;
         let attacking_piece_mailbox;
         let attacking_player;
         match self.player {
             Player::White => {
-                defending_piece_mailbox = white_piece_positions;
-                attacking_piece_mailbox = black_piece_positions;
+                defending_piece_mailbox = self.board.create_mailbox_for_player(Player::White);
+                attacking_piece_mailbox = self.board.create_mailbox_for_player(Player::Black);
                 attacking_player = Player::Black.as_index();
             }
             Player::Black => {
-                defending_piece_mailbox = black_piece_positions;
-                attacking_piece_mailbox = white_piece_positions;
+                defending_piece_mailbox = self.board.create_mailbox_for_player(Player::Black);
+                attacking_piece_mailbox = self.board.create_mailbox_for_player(Player::White);
                 attacking_player = Player::White.as_index();
             }
         }
@@ -777,7 +868,9 @@ struct LegalKingMovesIterator<'board> {
     player: Player,
     king_bitboard: BitBoard,
     moves: IntoIter<BitBoard, 8>,
-    friendly_pieces: u64,
+    checked_castle_queenside: bool,
+    checked_castle_kingside: bool,
+    friendly_pieces: BitBoard,
 }
 
 impl<'board> LegalKingMovesIterator<'board> {
@@ -799,16 +892,15 @@ impl<'board> LegalKingMovesIterator<'board> {
                 king_bitboard.up_left(),
             ]
             .into_iter(),
-            friendly_pieces: board.pawns[player_index].0
-                | board.knights[player_index].0
-                | board.bishops[player_index].0
-                | board.rooks[player_index].0
-                | board.queens[player_index].0,
+            friendly_pieces: board.create_mailbox_for_player(player),
+            checked_castle_kingside: false,
+            checked_castle_queenside: false,
         }
     }
 
     fn is_check(&self, player: Player, king_position: u64) -> bool {
-        let mut iterator = LegalCapturesAtLocationIterator::new(&self.board, player, king_position);
+        let mut iterator =
+            LegalCapturesAtLocationIterator::new(&self.board, player.other_player(), king_position);
         iterator.next().is_some()
     }
 }
@@ -818,14 +910,13 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let king_bitboard = self.king_bitboard.clone();
-        let friendlies = self.friendly_pieces;
 
         while let Some(king_move) = self.moves.next() {
             if king_move.0 == 0 {
                 continue;
             }
 
-            if king_move.intersects_with_u64(friendlies) {
+            if king_move.intersects_with(&self.friendly_pieces) {
                 continue;
             }
 
@@ -840,34 +931,77 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             });
         }
 
-        None
+        if self.checked_castle_queenside && self.checked_castle_kingside {
+            return None;
+        }
+
+        let castle_rank = match self.player {
+            Player::White => Rank::One,
+            Player::Black => Rank::Eight,
+        };
+
+        if !self.checked_castle_queenside {
+            self.checked_castle_queenside = true;
+
+            if self.board.player_can_castle_queenside(&self.player) {
+                let any_pieces_in_way = [File::b, File::c, File::d]
+                    .into_iter()
+                    .map(|file| Location::new(file, castle_rank))
+                    .map(|loc| loc.as_u64())
+                    .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
+
+                if !any_pieces_in_way {
+                    return Some(Move {
+                        from: Location::try_from(self.king_bitboard.0)
+                            .expect(Location::failed_from_usize_message()),
+                        to: Location::new(File::c, castle_rank),
+                    });
+                }
+            }
+        }
+
+        if !self.checked_castle_kingside {
+            self.checked_castle_kingside = true;
+
+            if self.board.player_can_castle_kingside(&self.player) {
+                let any_pieces_in_way = [File::f, File::g]
+                    .into_iter()
+                    .map(|file| Location::new(file, castle_rank))
+                    .map(|loc| loc.as_u64())
+                    .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
+
+                if !any_pieces_in_way {
+                    return Some(Move {
+                        from: Location::try_from(self.king_bitboard.0)
+                            .expect(Location::failed_from_usize_message()),
+                        to: Location::new(File::g, castle_rank),
+                    });
+                }
+            }
+        }
+
+        return None;
     }
 }
 
 struct LegalPawnMovesIterator<'board> {
     board: &'board Board,
-    checked_en_passants: bool,
     hostiles: BitBoard,
-    lookahead: ArrDeque<Move, 3>,
-    locations: Box<dyn Iterator<Item = Location>>,
+    lookahead: ArrDeque<Move, 5>,
+    pawn_locations: Box<dyn Iterator<Item = Location>>,
 }
 
 impl<'board> LegalPawnMovesIterator<'board> {
     fn new(board: &'board Board) -> Self {
-        let hostile_player = board.get_player_to_move().other_player().as_index();
+        let moving_player = board.get_player_to_move();
+        let hostile_player = moving_player.other_player();
         Self {
             board,
-            checked_en_passants: false,
-            hostiles: BitBoard(
-                board.pawns[hostile_player].0
-                    | board.knights[hostile_player].0
-                    | board.bishops[hostile_player].0
-                    | board.rooks[hostile_player].0
-                    | board.queens[hostile_player].0
-                    | board.kings[hostile_player].0,
-            ),
+            hostiles: board.create_mailbox_for_player(hostile_player),
             lookahead: ArrDeque::new(),
-            locations: Box::new(Location::all_locations()),
+            pawn_locations: Box::new(Location::from_bitboard(
+                board.pawns[moving_player.as_index()].0,
+            )),
         }
     }
 }
@@ -880,146 +1014,99 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
             return Some(lookahead);
         }
 
-        if !self.checked_en_passants {
-            self.checked_en_passants = true;
-            if let Some(last_move) = self.board.history.last() {
-                let moved_piece = self.board.at(last_move.to).expect("Board integrity issue: last recorded move describes a move to a square that now has no piece.");
+        while let Some(location) = self.pawn_locations.next() {
+            let location_bb = BitBoard(location.as_u64());
+            match self.board.get_player_to_move() {
+                Player::White => {
+                    let new_location = location_bb.up();
 
-                if (last_move.to.rank().as_int() - last_move.from.rank().as_int()).abs() == 2 {
-                    if let PieceKind::Pawn = moved_piece.kind() {
-                        let player_to_move = self.board.get_player_to_move().as_index();
-
-                        let move_bb = BitBoard(last_move.to.as_u64());
-                        let player_to_move_pawns = self.board.pawns[player_to_move].clone();
-
-                        let en_passant_left = move_bb.left();
-                        let en_passant_right = move_bb.right();
-
-                        if en_passant_left.intersects_with(&player_to_move_pawns) {
+                    // check for a double-push
+                    if location.rank() == Rank::Two {
+                        let new_location_double = new_location.up();
+                        if new_location_double.0 != 0
+                            && !new_location_double.intersects_with(&self.board.mailbox)
+                        {
                             debug_assert!(self
                                 .lookahead
                                 .push_back(Move {
-                                    from: Location::try_from(en_passant_left.0)
+                                    from: location,
+                                    to: Location::try_from(new_location_double.0)
                                         .expect(Location::failed_from_usize_message()),
-                                    to: Location::try_from(match player_to_move {
-                                        white!() => en_passant_left.up_right().0,
-                                        black!() => en_passant_left.down_right().0,
-                                        _ => unreachable!(),
-                                    })
-                                    .expect(Location::failed_from_usize_message()),
                                 })
                                 .is_ok());
                         }
+                    }
 
-                        if en_passant_right.intersects_with(&player_to_move_pawns) {
-                            debug_assert!(self
-                                .lookahead
-                                .push_back(Move {
-                                    from: Location::try_from(en_passant_right.0)
-                                        .expect(Location::failed_from_usize_message()),
-                                    to: Location::try_from(match player_to_move {
-                                        white!() => en_passant_left.up_left().0,
-                                        black!() => en_passant_right.down_left().0,
-                                        _ => unreachable!(),
-                                    })
-                                    .expect(Location::failed_from_usize_message())
-                                })
-                                .is_ok());
-                        }
+                    // check for captures
+                    let en_passant_target = self
+                        .board
+                        .en_passant_target_square()
+                        .map(|loc| loc.as_u64())
+                        .unwrap_or(0u64);
 
-                        if let Some(lookahead) = self.lookahead.pop_front() {
-                            return Some(lookahead);
+                    for capture_square in [location_bb.up_left(), location_bb.up_right()] {
+                        if capture_square.0 != 0
+                            && (capture_square.intersects_with(&self.hostiles)
+                                || capture_square.intersects_with_u64(en_passant_target))
+                        {
+                            debug_assert!(self.lookahead.push_back(Move {
+                                    from: location,
+                                    to: Location::try_from(capture_square.0).expect("Conversion of capture square to location should never fail"),
+                                }).is_ok());
                         }
+                    }
+
+                    if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox) {
+                        return Some(Move {
+                            from: location,
+                            to: Location::try_from(new_location.0).unwrap(),
+                        });
                     }
                 }
-            }
-        }
+                Player::Black => {
+                    let new_location = location_bb.down();
 
-        while let Some(location) = self.locations.next() {
-            let location_bb = BitBoard(location.as_u64());
-            if self.board.pawns[self.board.get_player_to_move().as_index()]
-                .intersects_with(&location_bb)
-            {
-                match self.board.get_player_to_move() {
-                    Player::White => {
-                        let new_location = location_bb.up();
-
-                        // check for a double-push
-                        if location.rank() == Rank::Two {
-                            let new_location_double = new_location.up();
-                            if new_location_double.0 != 0
-                                && !new_location_double.intersects_with(&self.board.mailbox)
-                            {
-                                debug_assert!(self
-                                    .lookahead
-                                    .push_back(Move {
-                                        from: location,
-                                        to: Location::try_from(new_location_double.0)
-                                            .expect(Location::failed_from_usize_message()),
-                                    })
-                                    .is_ok());
-                            }
-                        }
-
-                        // check for captures
-                        for capture_square in [location_bb.up_left(), location_bb.up_right()] {
-                            if capture_square.0 != 0
-                                && capture_square.intersects_with(&self.hostiles)
-                            {
-                                debug_assert!(self.lookahead.push_back(Move {
-                                    from: location,
-                                    to: Location::try_from(capture_square.0).expect("Conversion of capture square to location should never fail"),
-                                }).is_ok());
-                            }
-                        }
-
-                        if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox)
+                    if location.rank() == Rank::Seven {
+                        let new_location_double = new_location.down();
+                        if new_location_double.0 != 0
+                            && !new_location_double.intersects_with(&self.board.mailbox)
                         {
-                            return Some(Move {
-                                from: location,
-                                to: Location::try_from(new_location.0).unwrap(),
-                            });
+                            debug_assert!(self
+                                .lookahead
+                                .push_back(Move {
+                                    from: location,
+                                    to: Location::try_from(new_location_double.0)
+                                        .expect(Location::failed_from_usize_message()),
+                                })
+                                .is_ok());
                         }
                     }
-                    Player::Black => {
-                        let new_location = location_bb.down();
 
-                        if location.rank() == Rank::Seven {
-                            let new_location_double = new_location.down();
-                            if new_location_double.0 != 0
-                                && !new_location_double.intersects_with(&self.board.mailbox)
-                            {
-                                debug_assert!(self
-                                    .lookahead
-                                    .push_back(Move {
-                                        from: location,
-                                        to: Location::try_from(new_location_double.0)
-                                            .expect(Location::failed_from_usize_message()),
-                                    })
-                                    .is_ok());
-                            }
-                        }
+                    // check for captures
+                    let en_passant_target = self
+                        .board
+                        .en_passant_target_square()
+                        .map(|loc| loc.as_u64())
+                        .unwrap_or(0u64);
 
-                        // check for captures
-                        for capture_square in [location_bb.down_left(), location_bb.down_right()] {
-                            if capture_square.0 != 0
-                                && capture_square.intersects_with(&self.hostiles)
-                            {
-                                debug_assert!(self.lookahead.push_back(Move {
+                    for capture_square in [location_bb.down_left(), location_bb.down_right()] {
+                        if capture_square.0 != 0
+                            && (capture_square.intersects_with(&self.hostiles)
+                                || capture_square.intersects_with_u64(en_passant_target))
+                        {
+                            debug_assert!(self.lookahead.push_back(Move {
                                     from: location,
                                     to: Location::try_from(capture_square.0).expect("Conversion of capture square to location should never fail"),
                                 }).is_ok());
-                            }
                         }
+                    }
 
-                        if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox)
-                        {
-                            return Some(Move {
-                                from: location,
-                                to: Location::try_from(new_location.0)
-                                    .expect(Location::failed_from_usize_message()),
-                            });
-                        }
+                    if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox) {
+                        return Some(Move {
+                            from: location,
+                            to: Location::try_from(new_location.0)
+                                .expect(Location::failed_from_usize_message()),
+                        });
                     }
                 }
             }
@@ -1085,6 +1172,7 @@ impl Iterator for LegalKnightMovesIterator {
 }
 
 struct LegalBishopMovesIterator<'board> {
+    #[allow(unused)]
     board: &'board Board,
     bishop_locations: vec::IntoIter<Location>,
     current_bishop_data: Option<CurrentBishopData>,
@@ -1169,6 +1257,7 @@ impl<'board> Iterator for LegalBishopMovesIterator<'board> {
 }
 
 struct LegalRookMovesIterator<'board> {
+    #[allow(unused)]
     board: &'board Board,
     rook_locations: vec::IntoIter<Location>,
     current_rook_data: Option<CurrentRookData>,
