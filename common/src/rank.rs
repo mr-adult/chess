@@ -1,6 +1,6 @@
 use std::array::IntoIter;
 
-use serde::Serialize;
+use serde::{de::Visitor, Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Rank {
@@ -157,6 +157,13 @@ impl Rank {
     pub const fn eight_bit_filter() -> u64 {
         0xFF_00_00_00_00_00_00_00
     }
+
+    fn try_from_i128(i128: i128) -> Option<Self> {
+        if i128 < 1 || i128 > 8 {
+            return None;
+        }
+        return Some(Self::try_from(i128 as i8 - 1).unwrap());
+    }
 }
 
 impl TryFrom<i8> for Rank {
@@ -216,5 +223,138 @@ impl Serialize for Rank {
         S: serde::Serializer,
     {
         serializer.serialize_i8(self.as_int())
+    }
+}
+
+impl<'de> Deserialize<'de> for Rank {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let visitor = RankDeserializeVisitor;
+        deserializer.deserialize_i8(&visitor)
+    }
+}
+
+struct RankDeserializeVisitor;
+impl RankDeserializeVisitor {
+    const fn err_message() -> &'static str {
+        "Expected an integer between 0 and 8."
+    }
+}
+
+impl<'de> Visitor<'de> for &RankDeserializeVisitor {
+    type Value = Rank;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("an integer between 1 and 8.")
+    }
+
+    fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v > i128::MAX as u128 {
+            Err(E::custom(RankDeserializeVisitor::err_message()))
+        } else {
+            self.visit_i128(v as i128)
+        }
+    }
+
+    fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_i128(v as i128)
+    }
+
+    fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v > 0 && v <= 8 {
+            return Ok(Rank::try_from_i128(v).unwrap());
+        } else {
+            return Err(E::custom(RankDeserializeVisitor::err_message()));
+        }
+    }
+
+    fn visit_char<E>(self, v: char) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Rank::try_from(v).map_err(|_| E::custom(RankDeserializeVisitor::err_message()))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v.len() != 0 {
+            return Err(E::custom(RankDeserializeVisitor::err_message()));
+        }
+        match v.chars().next() {
+            None => return Err(E::custom(RankDeserializeVisitor::err_message())),
+            Some(ch) => {
+                return Ok(Rank::try_from(ch)
+                    .map_err(|_| E::custom(RankDeserializeVisitor::err_message()))?);
+            }
+        }
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(&v)
     }
 }

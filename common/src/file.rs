@@ -1,18 +1,18 @@
 use std::array::IntoIter;
 
-use serde::Serialize;
+use serde_derive::{Deserialize, Serialize};
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum File {
-    a = 0,
-    b = 1,
-    c = 2,
-    d = 3,
-    e = 4,
-    f = 5,
-    g = 6,
-    h = 7,
+    a,
+    b,
+    c,
+    d,
+    e,
+    f,
+    g,
+    h,
 }
 
 pub type FilesIterator = IntoIter<File, 8>;
@@ -122,32 +122,32 @@ impl File {
     pub const fn b_bit_filter() -> u64 {
         0x02_02_02_02_02_02_02_02
     }
-    
+
     #[inline]
     pub const fn c_bit_filter() -> u64 {
         0x04_04_04_04_04_04_04_04
     }
-    
+
     #[inline]
     pub const fn d_bit_filter() -> u64 {
         0x08_08_08_08_08_08_08_08
     }
-    
+
     #[inline]
     pub const fn e_bit_filter() -> u64 {
         0x10_10_10_10_10_10_10_10
     }
-    
+
     #[inline]
     pub const fn f_bit_filter() -> u64 {
         0x20_20_20_20_20_20_20_20
     }
-    
+
     #[inline]
     pub const fn g_bit_filter() -> u64 {
         0x40_40_40_40_40_40_40_40
     }
-    
+
     #[inline]
     pub const fn h_bit_filter() -> u64 {
         0x80_80_80_80_80_80_80_80
@@ -202,13 +202,5 @@ impl TryFrom<char> for File {
             'h' => Ok(File::h),
             _ => Err(()),
         }
-    }
-}
-
-impl Serialize for File {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer {
-        serializer.serialize_char(self.as_char())
     }
 }
