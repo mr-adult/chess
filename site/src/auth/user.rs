@@ -13,7 +13,7 @@ pub struct User {
     pub user_name: String,
 }
 
-/// This should never be send anywhere. It comes in from 
+/// This should never be send anywhere. It comes in from
 /// the client as a create user request.
 #[derive(Deserialize)]
 pub struct UserForCreation {
@@ -49,7 +49,7 @@ impl UserForLogin {
 }
 
 #[derive(Clone, FromRow, Debug)]
-pub struct  UserForAuth {
+pub struct UserForAuth {
     pub id: Uuid,
     pub user_name: String,
 

@@ -3,11 +3,11 @@ use tower_cookies::{Cookie, Cookies};
 
 use crate::AppState;
 
-mod user;
 mod crypt;
+mod user;
 
 pub fn get_auth_token_cookie_name() -> String {
-    return "auth_token".to_string()
+    return "auth_token".to_string();
 }
 
 pub(crate) async fn login_handler(
