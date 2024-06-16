@@ -1,9 +1,9 @@
 mod pgn_parser;
-pub use pgn_parser::{ParsedGame, PgnErr};
 use pgn_parser::PgnParser;
+pub use pgn_parser::{ParsedGame, PgnErr};
 
-pub use fen_parser::{BoardLayout, FenErr};
 use fen_parser::FenParser;
+pub use fen_parser::{BoardLayout, FenErr};
 
 mod acn_parser;
 mod fen_parser;

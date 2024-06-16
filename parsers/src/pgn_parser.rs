@@ -726,11 +726,17 @@ enum PgnToken {
     /// *
     Asterisk,
     /// Numeric Annotation Glyph
+    #[allow(unused)]
     NAG(Integer),
+    #[allow(unused)]
     String(Vec<u8>),
+    #[allow(unused)]
     Integer(Integer),
+    #[allow(unused)]
     Symbol(String),
+    #[allow(unused)]
     Comment(Vec<u8>),
+    #[allow(unused)]
     EscapedLine(Vec<u8>),
 }
 
@@ -757,7 +763,9 @@ impl PgnToken {
 
 #[derive(Debug)]
 struct Integer {
+    #[allow(unused)]
     raw: String,
+    #[allow(unused)]
     parsed: Option<usize>,
 }
 

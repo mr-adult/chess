@@ -4,7 +4,7 @@ use std::ops::Index;
 use std::str::Chars;
 use std::{fmt::Debug, iter::Peekable};
 
-use chess_common::{File, Location, PieceKind, Player, Rank, Piece};
+use chess_common::{File, Location, Piece, PieceKind, Player, Rank};
 
 /// A struct that represents a string
 /// of valid FEN data
@@ -108,7 +108,8 @@ impl<'fen> FenParser<'fen> {
             white_can_castle_kingside = parser.match_char('K');
             white_can_castle_queenside = parser.match_char('Q');
             black_can_castle_kingside = parser.match_char('k');
-            if white_can_castle_kingside || white_can_castle_queenside || black_can_castle_kingside {
+            if white_can_castle_kingside || white_can_castle_queenside || black_can_castle_kingside
+            {
                 black_can_castle_queenside = parser.match_char('q');
             } else {
                 let result = parser.match_char_or_err('q');
@@ -220,18 +221,42 @@ impl<'fen> FenParser<'fen> {
 
                 let matched = self.match_char_if(|ch| {
                     match ch {
-                        'p' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Pawn)),
-                        'P' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Pawn)),
-                        'n' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Knight)),
-                        'N' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Knight)),
-                        'b' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Bishop)),
-                        'B' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Bishop)),
-                        'r' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Rook)),
-                        'R' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Rook)),
-                        'q' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Queen)),
-                        'Q' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::Queen)),
-                        'k' => result[rank][file] = Some(Piece::new(Player::Black, PieceKind::King)),
-                        'K' => result[rank][file] = Some(Piece::new(Player::White, PieceKind::King)),
+                        'p' => {
+                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Pawn))
+                        }
+                        'P' => {
+                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Pawn))
+                        }
+                        'n' => {
+                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Knight))
+                        }
+                        'N' => {
+                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Knight))
+                        }
+                        'b' => {
+                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Bishop))
+                        }
+                        'B' => {
+                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Bishop))
+                        }
+                        'r' => {
+                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Rook))
+                        }
+                        'R' => {
+                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Rook))
+                        }
+                        'q' => {
+                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Queen))
+                        }
+                        'Q' => {
+                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Queen))
+                        }
+                        'k' => {
+                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::King))
+                        }
+                        'K' => {
+                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::King))
+                        }
                         '1'..='8' => {
                             num_to_skip = ch as u32 - 0x31_u32; // 0x31 is '1'
                         }
@@ -430,69 +455,87 @@ mod tests {
 
         // Rooks
         assert!(
-            layout[Location::new(File::a, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Rook))
+            layout[Location::new(File::a, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::h, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Rook))
+            layout[Location::new(File::h, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::a, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Rook))
+            layout[Location::new(File::a, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::h, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Rook))
+            layout[Location::new(File::h, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::Rook))
         );
 
         // Knights
         assert!(
-            layout[Location::new(File::b, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Knight))
+            layout[Location::new(File::b, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::g, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Knight))
+            layout[Location::new(File::g, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::b, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Knight))
+            layout[Location::new(File::b, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::g, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Knight))
+            layout[Location::new(File::g, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::Knight))
         );
 
         // Bishops
         assert!(
-            layout[Location::new(File::c, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Bishop))
+            layout[Location::new(File::c, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::f, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Bishop))
+            layout[Location::new(File::f, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::c, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Bishop))
+            layout[Location::new(File::c, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::f, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Bishop))
+            layout[Location::new(File::f, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::Bishop))
         );
 
         // Queens
         assert!(
-            layout[Location::new(File::d, Rank::One)] == Some(Piece::new(Player::White, PieceKind::Queen))
+            layout[Location::new(File::d, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::Queen))
         );
         assert!(
-            layout[Location::new(File::d, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::Queen))
+            layout[Location::new(File::d, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::Queen))
         );
 
         // Kings
         assert!(
-            layout[Location::new(File::e, Rank::One)] == Some(Piece::new(Player::White, PieceKind::King))
+            layout[Location::new(File::e, Rank::One)]
+                == Some(Piece::new(Player::White, PieceKind::King))
         );
         assert!(
-            layout[Location::new(File::e, Rank::Eight)] == Some(Piece::new(Player::Black, PieceKind::King))
+            layout[Location::new(File::e, Rank::Eight)]
+                == Some(Piece::new(Player::Black, PieceKind::King))
         );
 
         // Pawns
         for file in File::all_files_ascending() {
             assert!(
-                layout[Location::new(file, Rank::Two)] == Some(Piece::new(Player::White, PieceKind::Pawn))
+                layout[Location::new(file, Rank::Two)]
+                    == Some(Piece::new(Player::White, PieceKind::Pawn))
             );
             assert!(
-                layout[Location::new(file, Rank::Seven)] == Some(Piece::new(Player::Black, PieceKind::Pawn))
+                layout[Location::new(file, Rank::Seven)]
+                    == Some(Piece::new(Player::Black, PieceKind::Pawn))
             );
         }
 
@@ -513,5 +556,11 @@ mod tests {
         assert!(layout.full_move_counter() == 1);
 
         assert!(layout.to_fen() == input_fen);
+    }
+
+    #[test]
+    fn parses_valid_fen_strings() {
+        let fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 1 1";
+        parse_fen(fen).unwrap();
     }
 }

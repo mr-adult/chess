@@ -28,6 +28,7 @@ pub struct NormalMove {
     /// None = no promotion
     promotion_kind: Option<PieceKind>,
     /// '?' and '!' annotations
+    #[allow(unused)]
     move_suffix_annotations: [Option<SuffixAnnotation>; 2],
 }
 
