@@ -39,9 +39,11 @@ impl Iso8859_1 for String {
                 return None;
             }
             if byte & 0b11000000 == 0b11000000 {
-                // There's only room for 2 significant bits, so anything 
+                // There's only room for 2 significant bits, so anything
                 // bigger than 0b11 is going to overflow and be wrong
-                if (byte & 0b00011111) > 0b00000011 { return None; }
+                if (byte & 0b00011111) > 0b00000011 {
+                    return None;
+                }
                 let mut result_byte = (byte & 0b00000011) << 6;
                 result_byte |= bytes.next()? & 0b00111111;
                 result.push(result_byte);
@@ -119,11 +121,12 @@ mod tests {
             let iso_8859_1 = result.to_8859_1();
             if let Some(byte) = iso_8859_1.into_iter().next() {
                 println!(
-                    "UTF-8: {:?}; 8859-1: {}", 
-                    result.as_bytes()
+                    "UTF-8: {:?}; 8859-1: {}",
+                    result
+                        .as_bytes()
                         .into_iter()
                         .map(|one_byte| format!("{:#04x}", one_byte))
-                        .collect::<Vec<_>>(), 
+                        .collect::<Vec<_>>(),
                     byte[0]
                 );
                 assert!(byte[0] == i, "failed to encode {}. Got: {}", i, byte[0]);
@@ -132,7 +135,7 @@ mod tests {
             }
         }
 
-        // Anything outside of the 0-255 code point range should fail, 
+        // Anything outside of the 0-255 code point range should fail,
         // so pass \u{0101} as a test case.
         let str = String::from_utf8(vec![0xc4_u8, 0x81_u8]).unwrap();
         assert!(str.to_8859_1().is_none());
