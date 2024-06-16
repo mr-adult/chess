@@ -7,8 +7,11 @@ use std::{
 
 #[derive(Debug)]
 pub struct ArrDeque<T, const N: usize> {
+    /// The backing array of this ArrDeque.
     items: [MaybeUninit<T>; N],
+    /// The front index (inclusive).
     front: usize,
+    /// The back index (inclusive).
     back: usize,
     /// Because front will equal back at both size 0
     /// and size items.len(), we must keep track of
@@ -37,7 +40,7 @@ where
         Self {
             items: new_arr,
             front: 0,
-            back: self.len,
+            back: self.len - 1,
             len: self.len,
         }
     }
@@ -57,7 +60,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
         Self {
             items: from_fn(|_| MaybeUninit::uninit()),
             front: 0,
-            back: 0,
+            back: N - 1,
             len: 0,
         }
     }
@@ -69,7 +72,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
         Self {
             items: from_fn(|i| MaybeUninit::new(cb(i))),
             front: 0,
-            back: N,
+            back: N - 1,
             len: N,
         }
     }
@@ -87,14 +90,19 @@ impl<T, const N: usize> ArrDeque<T, N> {
     }
 
     pub fn clear(&mut self) {
-        unsafe { self.drop_elements(); }
-        self.back = self.front;
+        unsafe {
+            self.drop_elements();
+        }
+        self.back = if self.front == 0 {
+            N - 1
+        } else {
+            self.front - 1
+        };
         self.len = 0;
     }
 
     pub fn pop_front(&mut self) -> Option<T> {
         if self.len() == 0 {
-            println!("len 0");
             return None;
         }
 
@@ -138,12 +146,12 @@ impl<T, const N: usize> ArrDeque<T, N> {
             return None;
         }
 
+        let maybe_uninit = std::mem::replace(&mut self.items[self.back], MaybeUninit::uninit());
         if self.back == 0 {
             self.back = self.items.len();
         }
-        self.back -= 1;
         self.len -= 1;
-        let maybe_uninit = std::mem::replace(&mut self.items[self.back], MaybeUninit::uninit());
+        self.back -= 1;
         let value = unsafe { maybe_uninit.assume_init() };
         return Some(value);
     }
@@ -152,7 +160,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
         if self.len() == 0 {
             return None;
         }
-        let maybe_uninit = &self.items[self.back - 1];
+        let maybe_uninit = &self.items[self.back];
         let value = unsafe { maybe_uninit.assume_init_ref() };
         return Some(value);
     }
@@ -164,8 +172,8 @@ impl<T, const N: usize> ArrDeque<T, N> {
         }
 
         self.len += 1;
-        self.items[self.back] = MaybeUninit::new(item);
         self.back = (self.back + 1) % (self.items.len());
+        self.items[self.back] = MaybeUninit::new(item);
 
         Ok(())
     }
@@ -173,50 +181,84 @@ impl<T, const N: usize> ArrDeque<T, N> {
     pub fn iter(&self) -> Iter<T, N> {
         Iter {
             deque: self,
-            current: self.front,
+            indexes: self.active_indexes(),
         }
     }
 
     pub fn iter_mut(&mut self) -> IterMut<'_, T, N> {
-        let front = self.front;
+        let indexes = self.active_indexes();
         IterMut {
             deque: self,
-            current: front,
+            indexes: indexes,
         }
-    }
-
-    fn is_in_bounds(&self, index: usize) -> bool {
-        if self.front <= self.back {
-            return index >= self.front && index < self.back;
-        } else {
-            return index < self.back || (index >= self.front && index < self.items.len());
-        }
-    }
-
-    fn increment_inner_index(&self, index: usize) -> usize {
-        (index + 1) % self.items.len()
     }
 
     unsafe fn drop_elements(&mut self) {
-        if self.len() == 0 {
-            return;
-        }
-        let mut index = self.front;
-        loop {
-            if !self.is_in_bounds(index) {
-                break;
-            }
+        for index in self.active_indexes() {
             unsafe {
                 self.items[index].assume_init_drop();
+            };
+        }
+    }
+
+    fn active_indexes(&self) -> IndexIterator {
+        IndexIterator {
+            deque_front: self.front,
+            deque_back: self.back,
+            deque_capacity: self.items.len(),
+            deque_len: self.len(),
+            current: if self.front == 0 {
+                self.items.len() - 1
+            } else {
+                self.front - 1
+            },
+            num_iterations: 0,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct IndexIterator {
+    deque_front: usize,
+    deque_back: usize,
+    deque_capacity: usize,
+    deque_len: usize,
+    current: usize,
+    num_iterations: usize,
+}
+
+impl Iterator for IndexIterator {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.num_iterations >= self.deque_len {
+            return None;
+        }
+        self.num_iterations += 1;
+
+        self.current = (self.current + 1) % self.deque_capacity;
+
+        if self.deque_front <= self.deque_back {
+            if self.current >= self.deque_front && self.current <= self.deque_back {
+                return Some(self.current);
+            } else {
+                return None;
             }
-            index = (index + 1) % self.items.len();
+        } else if self.current <= self.deque_back
+            || (self.current >= self.deque_front && self.current < self.deque_capacity)
+        {
+            return Some(self.current);
+        } else {
+            return None;
         }
     }
 }
 
 impl<T, const N: usize> Drop for ArrDeque<T, N> {
     fn drop(&mut self) {
-        unsafe { self.drop_elements(); }
+        unsafe {
+            self.drop_elements();
+        }
     }
 }
 
@@ -242,11 +284,19 @@ impl<T, const N: usize> IntoIterator for ArrDeque<T, N> {
 
     type IntoIter = IntoIter<T, N>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        let front = self.front;
+    fn into_iter(mut self) -> Self::IntoIter {
+        let indexes = self.active_indexes();
+        // We're handling control of the objects over to the caller, so we need
+        // to not call the destructor on them.
+        self.len = 0;
+        self.back = if self.front == 0 {
+            self.items.len()
+        } else {
+            self.front - 1
+        };
         IntoIter {
             deque: self,
-            current: front,
+            indexes,
         }
     }
 }
@@ -254,63 +304,58 @@ impl<T, const N: usize> IntoIterator for ArrDeque<T, N> {
 #[derive(Debug)]
 pub struct IntoIter<T, const N: usize> {
     deque: ArrDeque<T, N>,
-    current: usize,
+    indexes: IndexIterator,
 }
 
 impl<T, const N: usize> Iterator for IntoIter<T, N> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.deque.is_in_bounds(self.current) {
-            return None;
+        if let Some(index) = self.indexes.next() {
+            let maybe_uninit =
+                std::mem::replace(&mut self.deque.items[index], MaybeUninit::uninit());
+            let value = unsafe { maybe_uninit.assume_init() };
+            return Some(value);
         }
-
-        let current = self.current;
-        self.current = self.deque.increment_inner_index(self.current);
-        let maybe_uninit = std::mem::replace(&mut self.deque.items[current], MaybeUninit::uninit());
-        let value = unsafe { maybe_uninit.assume_init() };
-        return Some(value);
+        return None;
     }
 }
 
 #[derive(Debug)]
 pub struct IterMut<'deque, T, const N: usize> {
     deque: &'deque mut ArrDeque<T, N>,
-    current: usize,
+    indexes: IndexIterator,
 }
 
 impl<'deque, T, const N: usize> Iterator for IterMut<'deque, T, N> {
     type Item = &'deque mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.deque.is_in_bounds(self.current) {
-            return None;
+        if let Some(index) = self.indexes.next() {
+            let maybe_uninit = &mut self.deque.items[index] as *mut MaybeUninit<T>;
+            return Some(unsafe { (*maybe_uninit).assume_init_mut() });
         }
-        let current = self.current;
-        self.current = self.deque.increment_inner_index(self.current);
-        let maybe_uninit = &mut self.deque.items[current] as *mut MaybeUninit<T>;
-        Some(unsafe { (*maybe_uninit).assume_init_mut() })
+
+        return None;
     }
 }
 
 #[derive(Debug)]
 pub struct Iter<'deque, T, const N: usize> {
     deque: &'deque ArrDeque<T, N>,
-    current: usize,
+    indexes: IndexIterator,
 }
 
 impl<'deque, T, const N: usize> Iterator for Iter<'deque, T, N> {
     type Item = &'deque T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.deque.is_in_bounds(self.current) {
-            println!("Out of bounds");
-            return None;
+        if let Some(index) = self.indexes.next() {
+            let maybe_uninit = &self.deque.items[index];
+            let value = unsafe { maybe_uninit.assume_init_ref() };
+            return Some(value);
         }
-        let current = self.current;
-        self.current = self.deque.increment_inner_index(self.current);
-        let maybe_uninit = &self.deque.items[current];
-        Some(unsafe { maybe_uninit.assume_init_ref() })
+        return None;
     }
 }
 
