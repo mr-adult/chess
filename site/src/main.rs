@@ -1,15 +1,18 @@
 use axum::{
     extract::State,
-    response::{Html, Json},
+    response::Html,
     routing::{get, post},
     Router,
 };
 use html_to_string_macro::html;
 use http::Method;
 use tower_cookies::CookieManagerLayer;
-use tower_http::{cors::{Any, CorsLayer}, services::ServeDir};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::ServeDir,
+};
 
-use sqlx::{postgres::PgPoolOptions, PgPool, Postgres};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 
 mod api;
 mod auth;
@@ -94,7 +97,7 @@ async fn start_db() -> PgPool {
 }
 
 async fn home(state: State<AppState>) -> Html<String> {
-    Html(html!{
+    Html(html! {
         <!DOCTYPE html>
         <head>
             <title>"Chess"</title>
