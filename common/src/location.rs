@@ -1,9 +1,9 @@
 use std::vec::IntoIter;
 
 use crate::{file::File, rank::Rank};
-use serde_derive::Serialize;
+use serde_derive::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Location {
     pub(crate) file: File,
     pub(crate) rank: Rank,

@@ -1,13 +1,13 @@
-mod location;
 mod file;
-mod rank;
-mod player;
-mod piece_kind;
+mod location;
 mod piece;
+mod piece_kind;
+mod player;
+mod rank;
 
-pub use location::Location;
 pub use file::File;
-pub use rank::Rank;
+pub use location::Location;
+pub use piece::Piece;
 pub use piece_kind::PieceKind;
 pub use player::Player;
-pub use piece::Piece;
+pub use rank::Rank;

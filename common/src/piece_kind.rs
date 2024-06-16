@@ -31,7 +31,7 @@ impl TryFrom<char> for PieceKind {
             'R' => Ok(PieceKind::Rook),
             'Q' => Ok(PieceKind::Queen),
             'K' => Ok(PieceKind::King),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

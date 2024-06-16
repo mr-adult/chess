@@ -22,7 +22,7 @@ impl Player {
     pub const fn other_player(&self) -> Player {
         match self {
             Player::White => Player::Black,
-            Player::Black => Player::Black,
+            Player::Black => Player::White,
         }
     }
 
