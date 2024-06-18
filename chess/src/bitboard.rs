@@ -1,12 +1,12 @@
 use std::{
-    array::{from_fn, IntoIter},
+    array::from_fn,
     fmt::Debug,
     ops::{BitAnd, BitOr, BitXor},
 };
 
 use chess_common::{File, Rank};
 
-use crate::arr_deque::ArrDeque;
+use crate::legal_moves::{BishopMovesIterator, KnightMovesIterator, RookMovesIterator};
 
 #[derive(Clone, Default)]
 pub(crate) struct BitBoard(pub(crate) u64);
@@ -44,12 +44,12 @@ impl BitBoard {
         Self(self.0.wrapping_shr(9) & !File::a_bit_filter())
     }
 
-    pub(crate) fn diagonal_moves(&self) -> DiagonalMovesIterator {
-        DiagonalMovesIterator::new(self.clone())
+    pub(crate) fn diagonal_moves(&self) -> BishopMovesIterator {
+        BishopMovesIterator::new(self.clone())
     }
 
-    pub(crate) fn straight_moves(&self) -> StraightMovesIterator {
-        StraightMovesIterator::new(self.clone())
+    pub(crate) fn straight_moves(&self) -> RookMovesIterator {
+        RookMovesIterator::new(self.clone())
     }
 
     pub(crate) fn knight_moves(&self) -> KnightMovesIterator {
@@ -133,187 +133,5 @@ impl Debug for BitBoard {
         result_string.push_str(&result.join("\n"));
         result_string.push('\n');
         write!(f, "{}", result_string)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum KnightDirection {
-    UpLeftx2,
-    Upx2Left,
-    UpRightx2,
-    Upx2Right,
-    DownLeftx2,
-    Downx2Left,
-    DownRightx2,
-    Downx2Right,
-}
-
-#[derive(Debug)]
-pub(crate) struct KnightMovesIterator {
-    original: BitBoard,
-    directions_to_check: IntoIter<KnightDirection, 8>,
-}
-
-impl KnightMovesIterator {
-    pub(crate) fn new(board: BitBoard) -> Self {
-        Self {
-            original: board,
-            directions_to_check: [
-                KnightDirection::UpLeftx2,
-                KnightDirection::Upx2Left,
-                KnightDirection::UpRightx2,
-                KnightDirection::Upx2Right,
-                KnightDirection::DownLeftx2,
-                KnightDirection::Downx2Left,
-                KnightDirection::DownRightx2,
-                KnightDirection::Downx2Right,
-            ]
-            .into_iter(),
-        }
-    }
-}
-
-impl Iterator for KnightMovesIterator {
-    type Item = BitBoard;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(direction) = self.directions_to_check.next() {
-            let new_square = match direction {
-                KnightDirection::UpLeftx2 => self.original.up_left().left(),
-                KnightDirection::Upx2Left => self.original.up_left().up(),
-                KnightDirection::UpRightx2 => self.original.up_right().right(),
-                KnightDirection::Upx2Right => self.original.up_right().up(),
-                KnightDirection::DownLeftx2 => self.original.down_left().left(),
-                KnightDirection::Downx2Left => self.original.down_left().down(),
-                KnightDirection::DownRightx2 => self.original.down_right().right(),
-                KnightDirection::Downx2Right => self.original.down_right().down(),
-            };
-
-            if new_square.0 != 0 {
-                return Some(new_square);
-            }
-        }
-        return None;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum DiagonalDirection {
-    UpLeft,
-    UpRight,
-    DownLeft,
-    DownRight,
-}
-
-#[derive(Debug)]
-pub(crate) struct DiagonalMovesIterator {
-    original: BitBoard,
-    previous: BitBoard,
-    directions_to_check: ArrDeque<DiagonalDirection, 4>,
-}
-
-impl DiagonalMovesIterator {
-    pub(crate) fn new(board: BitBoard) -> Self {
-        Self {
-            original: board.clone(),
-            previous: board,
-            directions_to_check: ArrDeque::from_fn(|i| match i {
-                0 => DiagonalDirection::DownLeft,
-                1 => DiagonalDirection::DownRight,
-                2 => DiagonalDirection::UpLeft,
-                3 => DiagonalDirection::UpRight,
-                _ => unreachable!(),
-            }),
-        }
-    }
-
-    pub(crate) fn next_direction(&mut self) -> bool {
-        self.directions_to_check.pop_front();
-        if self.previous.0 != self.original.0 {
-            self.previous = self.original.clone();
-        }
-        return self.directions_to_check.len() > 0;
-    }
-}
-
-impl Iterator for DiagonalMovesIterator {
-    type Item = BitBoard;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(direction) = self.directions_to_check.peek_front() {
-            match *direction {
-                DiagonalDirection::UpLeft => self.previous = self.previous.up_left(),
-                DiagonalDirection::UpRight => self.previous = self.previous.up_right(),
-                DiagonalDirection::DownLeft => self.previous = self.previous.down_left(),
-                DiagonalDirection::DownRight => self.previous = self.previous.down_right(),
-            }
-
-            if self.previous.0 == 0 {
-                self.next_direction();
-            } else {
-                return Some(self.previous.clone());
-            }
-        }
-
-        return None;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum StraightDirection {
-    Up,
-    Right,
-    Down,
-    Left,
-}
-
-#[derive(Debug)]
-pub(crate) struct StraightMovesIterator {
-    original: BitBoard,
-    previous: BitBoard,
-    directions_to_check: ArrDeque<StraightDirection, 4>,
-}
-
-impl StraightMovesIterator {
-    pub(crate) fn new(board: BitBoard) -> Self {
-        Self {
-            original: board.clone(),
-            previous: board,
-            directions_to_check: ArrDeque::from_fn(|i| match i {
-                0 => StraightDirection::Up,
-                1 => StraightDirection::Right,
-                2 => StraightDirection::Down,
-                3 => StraightDirection::Left,
-                _ => unreachable!(),
-            }),
-        }
-    }
-
-    pub(crate) fn next_direction(&mut self) -> bool {
-        self.directions_to_check.pop_front();
-        self.previous = self.original.clone();
-        return self.directions_to_check.len() > 0;
-    }
-}
-
-impl Iterator for StraightMovesIterator {
-    type Item = BitBoard;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(direction) = self.directions_to_check.peek_front() {
-            match *direction {
-                StraightDirection::Up => self.previous = self.previous.up(),
-                StraightDirection::Right => self.previous = self.previous.right(),
-                StraightDirection::Down => self.previous = self.previous.down(),
-                StraightDirection::Left => self.previous = self.previous.left(),
-            }
-
-            if self.previous.0 == 0 {
-                self.next_direction();
-            } else {
-                return Some(self.previous.clone());
-            }
-        }
-        return None;
     }
 }
