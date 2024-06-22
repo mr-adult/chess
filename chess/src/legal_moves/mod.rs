@@ -166,3 +166,135 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         return None;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chess_common::{File, Location, Rank};
+    use std::{collections::HashSet, str::FromStr};
+
+    use crate::{Board, Move};
+
+    #[test]
+    fn default_starting_position() {
+        let pawn_moves = File::all_files_ascending().flat_map(|file| {
+            [
+                Move {
+                    from: Location::new(file, Rank::Two),
+                    to: Location::new(file, Rank::Three),
+                },
+                Move {
+                    from: Location::new(file, Rank::Two),
+                    to: Location::new(file, Rank::Four),
+                },
+            ]
+        });
+
+        let knight_one_moves = [File::a, File::c].into_iter().map(|file| Move {
+            from: Location::new(File::b, Rank::One),
+            to: Location::new(file, Rank::Three),
+        });
+
+        let knight_two_moves = [File::f, File::h].into_iter().map(|file| Move {
+            from: Location::new(File::g, Rank::One),
+            to: Location::new(file, Rank::Three),
+        });
+
+        let expected_legal_moves = pawn_moves
+            .chain(knight_one_moves)
+            .chain(knight_two_moves)
+            .collect::<HashSet<_>>();
+
+        let actual_legal_moves = Board::default().legal_moves().collect::<HashSet<_>>();
+        assert_move_sets_equal(&expected_legal_moves, &actual_legal_moves);
+    }
+
+    #[test]
+    fn starting_position_black_move() {
+        let pawn_moves = File::all_files_ascending().flat_map(|file| {
+            [
+                Move {
+                    from: Location::new(file, Rank::Seven),
+                    to: Location::new(file, Rank::Six),
+                },
+                Move {
+                    from: Location::new(file, Rank::Seven),
+                    to: Location::new(file, Rank::Five),
+                },
+            ]
+        });
+
+        let knight_one_moves = [File::a, File::c].into_iter().map(|file| Move {
+            from: Location::new(File::b, Rank::Eight),
+            to: Location::new(file, Rank::Six),
+        });
+
+        let knight_two_moves = [File::f, File::h].into_iter().map(|file| Move {
+            from: Location::new(File::g, Rank::Eight),
+            to: Location::new(file, Rank::Six),
+        });
+
+        let expected_legal_moves = pawn_moves
+            .chain(knight_one_moves)
+            .chain(knight_two_moves)
+            .collect::<HashSet<_>>();
+
+        let actual_legal_moves =
+            Board::from_str("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 1 1")
+                .unwrap()
+                .legal_moves()
+                .collect::<HashSet<_>>();
+
+        assert_move_sets_equal(&expected_legal_moves, &actual_legal_moves);
+    }
+
+    #[test]
+    fn black_down_left_knight_move() {
+        let g8 = Location::new(File::g, Rank::Eight);
+        let expected_legal_moves_from_g8 = [
+            Location::new(File::h, Rank::Six),
+            Location::new(File::f, Rank::Six),
+            Location::new(File::e, Rank::Seven),
+        ]
+        .into_iter()
+        .map(|to| Move {
+            from: g8.clone(),
+            to,
+        }).collect::<HashSet<_>>();
+
+        let actual_legal_moves_from_g8 =
+            Board::from_str("rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 3 2")
+                .unwrap()
+                .legal_moves()
+                .filter(|move_| move_.from == Location::new(File::g, Rank::Eight))
+                .collect::<HashSet<_>>();
+
+        assert_move_sets_equal(&expected_legal_moves_from_g8, &actual_legal_moves_from_g8);
+    }
+
+    fn assert_move_sets_equal(expected: &HashSet<Move>, actual: &HashSet<Move>) {
+        if expected == actual {
+            return;
+        }
+
+        let mut messages = Vec::with_capacity(1);
+        for item in expected {
+            if !actual.contains(item) {
+                messages.push(format!(
+                    "Expected the move {:?}, but it was not found.",
+                    item
+                ))
+            }
+        }
+
+        for item in actual {
+            if !expected.contains(item) {
+                messages.push(format!(
+                    "Found the move {:?}, but it was not expected.",
+                    item
+                ));
+            }
+        }
+
+        panic!("{}", messages.join("\n"));
+    }
+}

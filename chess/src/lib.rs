@@ -1,4 +1,3 @@
-mod arr_deque;
 mod bitboard;
 mod board;
 mod chess_move;

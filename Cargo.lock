@@ -109,6 +109,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "arr_deque"
+version = "0.1.0"
+
+[[package]]
 name = "async-trait"
 version = "0.1.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,6 +325,7 @@ dependencies = [
 name = "chess_core"
 version = "0.1.0"
 dependencies = [
+ "arr_deque",
  "chess_common",
  "chess_parsers",
  "env_logger",

@@ -91,7 +91,6 @@ impl<T, const N: usize> ArrDeque<T, N> {
         self.len
     }
 
-    #[allow(unused)]
     pub fn clear(&mut self) {
         unsafe {
             self.drop_elements();
@@ -127,7 +126,6 @@ impl<T, const N: usize> ArrDeque<T, N> {
         return Some(value);
     }
 
-    #[allow(unused)]
     pub fn push_front(&mut self, item: T) -> Result<(), ()> {
         debug_assert!(self.len() <= self.items.len(), "{}", DATA_INTEGRITY_ERR_MSG);
         if self.len() == self.items.len() {

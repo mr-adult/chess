@@ -1,6 +1,7 @@
 use chess_common::{Location, Player, Rank};
 
-use crate::{arr_deque::ArrDeque, bitboard::BitBoard, Board, Move};
+use crate::{bitboard::BitBoard, Board, Move};
+use arr_deque::ArrDeque;
 
 pub(crate) struct LegalPawnMovesIterator<'board> {
     board: &'board Board,

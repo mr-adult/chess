@@ -11,6 +11,7 @@ edition = "2021"
 RUST_LOG = "DEBUG"
 
 [dependencies]
+arr_deque = { path = "../arr_deque" }
 chess_common = { path = "../common" }
 chess_parsers = { path = "../parsers" }
 log = "0.4"

@@ -1,6 +1,7 @@
 use chess_common::Location;
 
-use crate::{arr_deque::ArrDeque, bitboard::BitBoard, Board, Move};
+use crate::{ bitboard::BitBoard, Board, Move};
+use arr_deque::ArrDeque;
 
 pub(crate) struct LegalKnightMovesIterator {
     friendlies: BitBoard,

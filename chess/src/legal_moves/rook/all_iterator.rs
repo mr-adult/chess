@@ -1,4 +1,5 @@
-use crate::{arr_deque::ArrDeque, bitboard::BitBoard};
+use crate::{ bitboard::BitBoard};
+use arr_deque::ArrDeque;
 
 #[derive(Debug, Clone, Copy)]
 enum StraightDirection {
