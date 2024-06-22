@@ -38,7 +38,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(home))
         .route("/login", post(auth::login_handler))
-        .nest_service("/api", api::create_api_router())
+        .nest_service("/api/v0", api::create_api_router())
         .nest_service("/styles", ServeDir::new("src/styles"))
         .nest_service("/scripts", ServeDir::new("src/scripts"))
         .layer(

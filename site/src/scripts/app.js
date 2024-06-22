@@ -7,7 +7,7 @@ var legalMoves = [];
 
 function updateLegalMoves() {
     let game_board = document.querySelector("#game_fen").textContent;
-    let url = "/api/legal_moves?board_fen=" + encodeURI(game_board);
+    let url = "/api/v0/legal_moves?board_fen=" + encodeURI(game_board);
     fetch(url, {
         method: "GET"
     })
@@ -61,7 +61,7 @@ function onDrop(e) {
     var to_rank = e.target.getAttribute("rank") || "";
     var to_rank_int = parseInt(to_rank);
 
-    fetch("/api/make_move", {
+    fetch("/api/v0/make_move", {
         method: "POST",
         headers: {
             "Content-type": "application/json; charset=UTF-8"
