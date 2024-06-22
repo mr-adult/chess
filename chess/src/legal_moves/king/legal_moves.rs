@@ -127,21 +127,4 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use crate::legal_moves::LegalKingMovesIterator;
-
-    use crate::Board;
-
-    #[test]
-    fn gets_legal_king_moves() {
-        let board =
-            Board::from_str("RNBKQBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbkqbnr w KQkq - 0 1").unwrap();
-
-        let legal_king_moves =
-            LegalKingMovesIterator::new(&board, board.get_player_to_move()).collect::<Vec<_>>();
-        assert_eq!(0, legal_king_moves.len());
-    }
-}
+// Tests should live in the legal_moves module

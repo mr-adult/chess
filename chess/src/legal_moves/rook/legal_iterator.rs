@@ -57,7 +57,7 @@ impl<'board> Iterator for LegalRookMovesIterator<'board> {
                     Some(location) => {
                         let move_data = CurrentRookData {
                             from_location: location,
-                            to_locations: RookMovesIterator::new(BitBoard(location.as_u64())),
+                            to_locations: RookMovesIterator::new(BitBoard::new(location.as_u64())),
                         };
                         self.current_rook_data = Some(move_data);
                         self.current_rook_data.as_mut().unwrap()

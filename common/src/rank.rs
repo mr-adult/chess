@@ -2,7 +2,7 @@ use std::array::IntoIter;
 
 use serde::{de::Visitor, Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Rank {
     One = 1,
     Two = 2,

@@ -3,26 +3,31 @@ use chess_common::Location;
 use crate::{ bitboard::BitBoard, Board, Move};
 use arr_deque::ArrDeque;
 
-pub(crate) struct LegalKnightMovesIterator {
+use super::KnightMovesIterator;
+
+pub(crate) struct LegalKnightMovesIterator<'board> {
+    board: &'board Board,
     friendlies: BitBoard,
-    knights: BitBoard,
     locations: Box<dyn Iterator<Item = Location>>,
     lookahead: ArrDeque<Move, 8>,
 }
 
-impl LegalKnightMovesIterator {
-    pub(crate) fn new(board: &Board) -> Self {
+impl<'board> LegalKnightMovesIterator<'board> {
+    pub(crate) fn new(board: &'board Board) -> Self {
         let player_to_move = board.get_player_to_move();
+        let player_to_move_index = player_to_move.as_index();
         Self {
+            board: &board,
             friendlies: board.create_mailbox_for_player(player_to_move),
-            knights: board.knights[player_to_move.as_index()].clone(),
-            locations: Box::new(Location::all_locations()),
+            locations: Box::new(Location::from_bitboard(
+                board.knights[player_to_move_index].0,
+            )),
             lookahead: ArrDeque::new(),
         }
     }
 }
 
-impl Iterator for LegalKnightMovesIterator {
+impl<'board> Iterator for LegalKnightMovesIterator<'board> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -31,26 +36,24 @@ impl Iterator for LegalKnightMovesIterator {
         }
 
         while let Some(location) = self.locations.next() {
-            let location_bb = BitBoard(location.as_u64());
-            if self.knights.intersects_with(&location_bb) {
-                let mut iter = location_bb.knight_moves();
-                while let Some(knight_move) = iter.next() {
-                    if self.friendlies.intersects_with(&knight_move) {
-                        continue;
-                    }
-                    debug_assert!(self
-                        .lookahead
-                        .push_back(Move {
-                            from: location,
-                            to: Location::try_from(knight_move.0)
-                                .expect(Location::failed_from_usize_message()),
-                        })
-                        .is_ok());
+            let mut iter = KnightMovesIterator::new(BitBoard::new(location.as_u64()));
+            while let Some(knight_move) = iter.next() {
+                if self.friendlies.intersects_with(&knight_move) {
+                    continue;
                 }
 
-                if let Some(lookahead) = self.lookahead.pop_front() {
-                    return Some(lookahead);
-                }
+                assert!(self
+                    .lookahead
+                    .push_back(Move {
+                        from: location,
+                        to: Location::try_from(knight_move.0)
+                            .expect(Location::failed_from_usize_message()),
+                    })
+                    .is_ok());
+            }
+
+            if let Some(lookahead) = self.lookahead.pop_front() {
+                return Some(lookahead);
             }
         }
 

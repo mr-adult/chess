@@ -271,7 +271,7 @@ impl Board {
 
     pub(crate) fn create_mailbox_for_player(&self, player: Player) -> BitBoard {
         let player_index = player.as_index();
-        return BitBoard(
+        return BitBoard::new(
             self.pawns[player_index].0
                 | self.knights[player_index].0
                 | self.bishops[player_index].0
@@ -492,10 +492,10 @@ impl Board {
                         let real_pawn_location;
                         match player_to_move {
                             Player::Black => {
-                                real_pawn_location = BitBoard(en_passant_target.as_u64()).up();
+                                real_pawn_location = BitBoard::new(en_passant_target.as_u64()).up();
                             }
                             Player::White => {
-                                real_pawn_location = BitBoard(en_passant_target.as_u64()).down();
+                                real_pawn_location = BitBoard::new(en_passant_target.as_u64()).down();
                             }
                         }
                         real_pawn_location.0

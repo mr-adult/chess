@@ -5,26 +5,22 @@ mod bishop;
 mod king;
 mod knight;
 mod pawn;
-pub(crate) mod rook;
 mod queen;
+pub(crate) mod rook;
 
-pub(super) use bishop::BishopMovesIterator;
 use bishop::LegalBishopMovesIterator;
 use king::LegalKingMovesIterator;
-pub(super) use knight::KnightMovesIterator;
 use knight::LegalKnightMovesIterator;
 use pawn::LegalPawnMovesIterator;
-pub(super) use rook::RookMovesIterator;
-use rook::LegalRookMovesIterator;
 use queen::LegalQueenMovesIterator;
-
+use rook::LegalRookMovesIterator;
 
 pub(crate) struct LegalMovesIterator<'board> {
     board: &'board Board,
     player: Player,
     is_check: Option<bool>,
     pawn_moves_iterator: Option<LegalPawnMovesIterator<'board>>,
-    knight_moves_iterator: Option<LegalKnightMovesIterator>,
+    knight_moves_iterator: Option<LegalKnightMovesIterator<'board>>,
     bishop_moves_iterator: Option<LegalBishopMovesIterator<'board>>,
     rook_moves_iterator: Option<LegalRookMovesIterator<'board>>,
     queen_moves_iterator: Option<LegalQueenMovesIterator<'board>>,

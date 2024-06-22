@@ -24,18 +24,18 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
             target
         );
 
-        let target_bb = BitBoard(target);
+        let target_bb = BitBoard::new(target);
 
         Self {
             board,
             player_to_move: player_to_move.as_index(),
             target_square: target,
             attacking_defending_pieces_mailbox: None,
-            knight_moves: target_bb.knight_moves(),
+            knight_moves: KnightMovesIterator::new(target_bb.clone()),
             knight_moves_is_done: false,
-            diagonal_moves: target_bb.diagonal_moves(),
+            diagonal_moves: BishopMovesIterator::new(target_bb.clone()),
             diagonal_moves_is_done: false,
-            straight_moves: target_bb.straight_moves(),
+            straight_moves: RookMovesIterator::new(target_bb),
             straight_moves_is_done: false,
         }
     }

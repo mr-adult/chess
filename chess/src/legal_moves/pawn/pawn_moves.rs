@@ -34,7 +34,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
         }
 
         while let Some(location) = self.pawn_locations.next() {
-            let location_bb = BitBoard(location.as_u64());
+            let location_bb = BitBoard::new(location.as_u64());
             match self.board.get_player_to_move() {
                 Player::White => {
                     let new_location = location_bb.up();
@@ -43,6 +43,8 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                     if location.rank() == Rank::Two {
                         let new_location_double = new_location.up();
                         if new_location_double.0 != 0
+                            // Can't double-push through another piece
+                            && !new_location.intersects_with(&self.board.mailbox)
                             && !new_location_double.intersects_with(&self.board.mailbox)
                         {
                             debug_assert!(self
@@ -88,6 +90,8 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                     if location.rank() == Rank::Seven {
                         let new_location_double = new_location.down();
                         if new_location_double.0 != 0
+                            // Can't double-push through another piece.
+                            && !new_location.intersects_with(&self.board.mailbox)
                             && !new_location_double.intersects_with(&self.board.mailbox)
                         {
                             debug_assert!(self

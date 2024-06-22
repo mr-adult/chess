@@ -3,7 +3,7 @@ use std::array::IntoIter;
 use serde_derive::{Deserialize, Serialize};
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum File {
     a,
     b,

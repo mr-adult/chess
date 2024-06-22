@@ -6,54 +6,56 @@ use std::{
 
 use chess_common::{File, Rank};
 
-use crate::legal_moves::{BishopMovesIterator, KnightMovesIterator, RookMovesIterator};
+#[cfg(debug_assertions)]
+use chess_common::Location;
 
-#[derive(Clone, Default)]
-pub(crate) struct BitBoard(pub(crate) u64);
+#[derive(Clone)]
+pub(crate) struct BitBoard(
+    pub(crate) u64,
+    #[allow(unused)]
+    #[cfg(debug_assertions)]
+    Location,
+);
 
 impl BitBoard {
+    pub(crate) fn new(value: u64) -> Self {
+        BitBoard(
+            value,
+            #[cfg(debug_assertions)]
+            Location::try_from(value).unwrap_or(Location::new(File::a, Rank::One)),
+        )
+    }
+
     pub(crate) fn left(&self) -> Self {
-        Self(self.0.wrapping_shr(1) & !File::h_bit_filter())
+        Self::new(self.0.wrapping_shr(1) & !File::h_bit_filter())
     }
 
     pub(crate) fn right(&self) -> Self {
-        Self(self.0.wrapping_shl(1) & !File::a_bit_filter())
+        Self::new(self.0.wrapping_shl(1) & !File::a_bit_filter())
     }
 
     pub(crate) fn up(&self) -> Self {
-        Self(self.0.wrapping_shl(8))
+        Self::new(self.0.wrapping_shl(8))
     }
 
     pub(crate) fn down(&self) -> Self {
-        Self(self.0.wrapping_shr(8))
+        Self::new(self.0.wrapping_shr(8))
     }
 
     pub(crate) fn up_left(&self) -> Self {
-        Self(self.0.wrapping_shl(7) & !File::h_bit_filter())
+        Self::new(self.0.wrapping_shl(7) & !File::h_bit_filter())
     }
 
     pub(crate) fn up_right(&self) -> Self {
-        Self(self.0.wrapping_shl(9) & !File::a_bit_filter())
+        Self::new(self.0.wrapping_shl(9) & !File::a_bit_filter())
     }
 
     pub(crate) fn down_left(&self) -> Self {
-        Self(self.0.wrapping_shr(7) & !File::h_bit_filter())
+        Self::new(self.0.wrapping_shr(9) & !File::h_bit_filter())
     }
 
     pub(crate) fn down_right(&self) -> Self {
-        Self(self.0.wrapping_shr(9) & !File::a_bit_filter())
-    }
-
-    pub(crate) fn diagonal_moves(&self) -> BishopMovesIterator {
-        BishopMovesIterator::new(self.clone())
-    }
-
-    pub(crate) fn straight_moves(&self) -> RookMovesIterator {
-        RookMovesIterator::new(self.clone())
-    }
-
-    pub(crate) fn knight_moves(&self) -> KnightMovesIterator {
-        KnightMovesIterator::new(self.clone())
+        Self::new(self.0.wrapping_shr(7) & !File::a_bit_filter())
     }
 
     pub(crate) fn intersects_with(&self, other: &BitBoard) -> bool {
@@ -69,7 +71,7 @@ impl BitAnd for BitBoard {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        Self(self.0 & rhs.0)
+        Self::new(self.0 & rhs.0)
     }
 }
 
@@ -77,7 +79,7 @@ impl BitOr for BitBoard {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
+        Self::new(self.0 | rhs.0)
     }
 }
 
@@ -85,7 +87,13 @@ impl BitXor for BitBoard {
     type Output = Self;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Self(self.0 ^ rhs.0)
+        Self::new(self.0 ^ rhs.0)
+    }
+}
+
+impl Default for BitBoard {
+    fn default() -> Self {
+        Self::new(0)
     }
 }
 

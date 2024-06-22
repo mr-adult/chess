@@ -3,18 +3,18 @@ use std::vec::IntoIter;
 use crate::{file::File, rank::Rank};
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Location {
     pub(crate) file: File,
     pub(crate) rank: Rank,
 }
 
 impl Location {
-    pub fn new(file: File, rank: Rank) -> Location {
-        Location { file, rank }
+    pub fn new(file: File, rank: Rank) -> Self {
+        Self { file, rank }
     }
 
-    pub fn all_locations() -> impl Iterator<Item = Location> {
+    pub fn all_locations() -> impl Iterator<Item = Self> {
         Rank::all_ranks_ascending()
             .flat_map(|rank| File::all_files_ascending().map(move |file| Location::new(file, rank)))
     }
@@ -23,7 +23,7 @@ impl Location {
         "Expected only one bit to be populated."
     }
 
-    pub fn from_bitboard(bitboard: u64) -> IntoIter<Location> {
+    pub fn from_bitboard(bitboard: u64) -> IntoIter<Self> {
         if bitboard & u64::MAX == 0 {
             return Vec::new().into_iter();
         }
@@ -154,51 +154,16 @@ impl TryFrom<u64> for Location {
     fn try_from(value: u64) -> Result<Self, Self::Error> {
         // https://stackoverflow.com/questions/28303832/check-if-byte-has-more-than-one-bit-set
         if value == 0 || value & (value - 1) != 0 {
-            println!("Value:\n{:?}", value);
             return Err(());
         }
 
-        let rank = if value & Rank::one_bit_filter() != 0 {
-            Rank::One
-        } else if value & Rank::two_bit_filter() != 0 {
-            Rank::Two
-        } else if value & Rank::three_bit_filter() != 0 {
-            Rank::Three
-        } else if value & Rank::four_bit_filter() != 0 {
-            Rank::Four
-        } else if value & Rank::five_bit_filter() != 0 {
-            Rank::Five
-        } else if value & Rank::six_bit_filter() != 0 {
-            Rank::Six
-        } else if value & Rank::seven_bit_filter() != 0 {
-            Rank::Seven
-        } else if value & Rank::eight_bit_filter() != 0 {
-            Rank::Eight
-        } else {
-            unreachable!()
-        };
-
-        let file = if value & File::a_bit_filter() != 0 {
-            File::a
-        } else if value & File::b_bit_filter() != 0 {
-            File::b
-        } else if value & File::c_bit_filter() != 0 {
-            File::c
-        } else if value & File::d_bit_filter() != 0 {
-            File::d
-        } else if value & File::e_bit_filter() != 0 {
-            File::e
-        } else if value & File::f_bit_filter() != 0 {
-            File::f
-        } else if value & File::g_bit_filter() != 0 {
-            File::g
-        } else if value & File::h_bit_filter() != 0 {
-            File::h
-        } else {
-            unreachable!()
-        };
-
-        Ok(Location::new(file, rank))
+        let mut iter = Location::from_bitboard(value);
+        if let Some(value) = iter.next() {
+            let value = value;
+            if iter.next().is_some() { return Err(()); }
+            return Ok(value);
+        }
+        return Err(());
     }
 }
 
