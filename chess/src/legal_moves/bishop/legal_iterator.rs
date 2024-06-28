@@ -6,7 +6,6 @@ use crate::{bitboard::BitBoard, Board, Move};
 
 use super::all_iterator::BishopMovesIterator;
 
-
 pub(crate) struct LegalBishopMovesIterator<'board> {
     #[allow(unused)]
     board: &'board Board,
@@ -58,7 +57,9 @@ impl<'board> Iterator for LegalBishopMovesIterator<'board> {
                     Some(location) => {
                         let move_data = CurrentBishopData {
                             from_location: location,
-                            to_locations: BishopMovesIterator::new(BitBoard::new(location.as_u64())),
+                            to_locations: BishopMovesIterator::new(BitBoard::new(
+                                location.as_u64(),
+                            )),
                         };
                         self.current_bishop_data = Some(move_data);
                         self.current_bishop_data.as_mut().unwrap()

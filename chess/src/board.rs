@@ -486,22 +486,23 @@ impl Board {
                 let to = move_.to.as_u64();
 
                 let en_passant_target = self.en_passant_target_square();
-                let capture_to =
-                    if en_passant_target.is_some() && en_passant_target.unwrap() == move_.to {
-                        let en_passant_target = en_passant_target.unwrap();
-                        let real_pawn_location;
-                        match player_to_move {
-                            Player::Black => {
-                                real_pawn_location = BitBoard::new(en_passant_target.as_u64()).up();
-                            }
-                            Player::White => {
-                                real_pawn_location = BitBoard::new(en_passant_target.as_u64()).down();
-                            }
+                let capture_to = if en_passant_target.is_some()
+                    && en_passant_target.unwrap() == move_.to
+                {
+                    let en_passant_target = en_passant_target.unwrap();
+                    let real_pawn_location;
+                    match player_to_move {
+                        Player::Black => {
+                            real_pawn_location = BitBoard::new(en_passant_target.as_u64()).up();
                         }
-                        real_pawn_location.0
-                    } else {
-                        to
-                    };
+                        Player::White => {
+                            real_pawn_location = BitBoard::new(en_passant_target.as_u64()).down();
+                        }
+                    }
+                    real_pawn_location.0
+                } else {
+                    to
+                };
 
                 if let Some(captured_piece) = self
                     .at(Location::try_from(capture_to)
