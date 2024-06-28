@@ -160,7 +160,9 @@ impl TryFrom<u64> for Location {
         let mut iter = Location::from_bitboard(value);
         if let Some(value) = iter.next() {
             let value = value;
-            if iter.next().is_some() { return Err(()); }
+            if iter.next().is_some() {
+                return Err(());
+            }
             return Ok(value);
         }
         return Err(());

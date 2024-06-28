@@ -1,6 +1,6 @@
 use chess_common::Location;
 
-use crate::{ bitboard::BitBoard, Board, Move};
+use crate::{bitboard::BitBoard, Board, Move};
 use arr_deque::ArrDeque;
 
 use super::KnightMovesIterator;

@@ -1,3 +1,4 @@
+use arr_deque::ArrDeque;
 use chess_common::{black, white, Location, Player};
 
 use crate::{Board, Move};
@@ -255,7 +256,8 @@ mod tests {
         .map(|to| Move {
             from: g8.clone(),
             to,
-        }).collect::<HashSet<_>>();
+        })
+        .collect::<HashSet<_>>();
 
         let actual_legal_moves_from_g8 =
             Board::from_str("rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 3 2")
