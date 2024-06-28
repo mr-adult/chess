@@ -16,8 +16,6 @@ pub(crate) async fn new_game() -> Html<String> {
 pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
     let ergo_board = board.into_ergo_board();
 
-    println!("{ergo_board:?}");
-
     let board_html = Rank::all_ranks_ascending().rev().map(|rank| {
         let row = File::all_files_ascending()
             .map(|file| {

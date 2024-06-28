@@ -33,9 +33,7 @@ function onDragStart(e) {
     for (var i = 0; i < legalMoves.length; i++) {
         if (legalMoves[i].from.file === file && legalMoves[i].from.rank == rank) {
             var selector = ".board_square[file=\"" + legalMoves[i].to.file + "\"][rank=\"" + legalMoves[i].to.rank + "\"]";
-            console.log(selector);
             var element = document.querySelector(selector);
-            console.log(element);
             if (!element) { continue; }
             element
                 .classList
