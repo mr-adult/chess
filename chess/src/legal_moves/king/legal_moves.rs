@@ -41,7 +41,7 @@ impl<'board> LegalKingMovesIterator<'board> {
         }
     }
 
-    fn is_check(&self, player: Player, king_position: u64) -> bool {
+    pub(crate) fn is_check(&self, player: Player, king_position: u64) -> bool {
         let mut iterator =
             LegalCapturesAtLocationIterator::new(&self.board, player.other_player(), king_position);
         iterator.next().is_some()

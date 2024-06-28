@@ -1,13 +1,19 @@
-use chess_common::{black, white, Location, Player};
+use chess_common::{Location, Player};
 
-use crate::{bitboard::BitBoard, legal_moves::{bishop::BishopMovesIterator, knight::KnightMovesIterator, rook::RookMovesIterator}, Board, Move};
+use crate::{
+    bitboard::BitBoard,
+    legal_moves::{
+        bishop::BishopMovesIterator, knight::KnightMovesIterator, rook::RookMovesIterator,
+    },
+    Board, Move,
+};
 
 #[derive(Debug)]
 pub(super) struct LegalCapturesAtLocationIterator<'board> {
     board: &'board Board,
     player_to_move: usize,
     target_square: u64,
-    attacking_defending_pieces_mailbox: Option<(u64, u64)>,
+    target_square_location: Location,
     knight_moves: KnightMovesIterator,
     knight_moves_is_done: bool,
     diagonal_moves: BishopMovesIterator,
@@ -30,7 +36,8 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
             board,
             player_to_move: player_to_move.as_index(),
             target_square: target,
-            attacking_defending_pieces_mailbox: None,
+            target_square_location: Location::try_from(target)
+                .expect(Location::failed_from_usize_message()),
             knight_moves: KnightMovesIterator::new(target_bb.clone()),
             knight_moves_is_done: false,
             diagonal_moves: BishopMovesIterator::new(target_bb.clone()),
@@ -47,53 +54,13 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
     fn next(&mut self) -> Option<Self::Item> {
         self.board.assert_board_integrity();
 
-        // lazy calculate our mailboxes of pieces. These help
-        // speed up some checks later on.
-        let defending_pieces_mailbox;
-        let attacking_pieces_mailbox;
-        if let Some((attacking_mailbox, defending_mailbox)) =
-            self.attacking_defending_pieces_mailbox
-        {
-            attacking_pieces_mailbox = attacking_mailbox;
-            defending_pieces_mailbox = defending_mailbox;
-        } else {
-            let white_pieces_mailbox = self.board.pawns[white!()].0
-                | self.board.knights[white!()].0
-                | self.board.bishops[white!()].0
-                | self.board.rooks[white!()].0
-                | self.board.queens[white!()].0;
-            // Omit the kings. We only care about the opponent's king
-
-            let black_pieces_mailbox = self.board.pawns[black!()].0
-                | self.board.knights[black!()].0
-                | self.board.bishops[black!()].0
-                | self.board.rooks[black!()].0
-                | self.board.queens[black!()].0;
-            // Omit the kings. We only care about the opponent's king
-
-            match self.player_to_move {
-                white!() => {
-                    defending_pieces_mailbox = white_pieces_mailbox;
-                    attacking_pieces_mailbox = black_pieces_mailbox | self.board.kings[black!()].0;
-                }
-                black!() => {
-                    defending_pieces_mailbox = black_pieces_mailbox;
-                    attacking_pieces_mailbox = white_pieces_mailbox | self.board.kings[white!()].0;
-                }
-                value => unreachable!("{}", value),
-            }
-            self.attacking_defending_pieces_mailbox =
-                Some((attacking_pieces_mailbox, defending_pieces_mailbox));
-        }
-
         if !self.knight_moves_is_done {
             while let Some(attacking_knight_square) = self.knight_moves.next() {
                 if self.board.knights[self.player_to_move].intersects_with_u64(self.target_square) {
                     return Some(Move {
                         from: Location::try_from(attacking_knight_square.0)
                             .expect(Location::failed_from_usize_message()),
-                        to: Location::try_from(self.target_square)
-                            .expect(Location::failed_from_usize_message()),
+                        to: self.target_square_location.clone(),
                     });
                 }
             }
@@ -108,8 +75,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     return Some(Move {
                         from: Location::try_from(diagonal_move.0)
                             .expect(Location::failed_from_usize_message()),
-                        to: Location::try_from(self.target_square)
-                            .expect(Location::failed_from_usize_message()),
+                        to: self.target_square_location.clone(),
                     });
                 }
             }
@@ -125,8 +91,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     return Some(Move {
                         from: Location::try_from(straight_move.0)
                             .expect(Location::failed_from_usize_message()),
-                        to: Location::try_from(self.target_square)
-                            .expect(Location::failed_from_usize_message()),
+                        to: self.target_square_location.clone(),
                     });
                 }
             }
