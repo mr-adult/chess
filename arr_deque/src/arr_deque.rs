@@ -104,7 +104,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
     }
 
     pub fn pop_front(&mut self) -> Option<T> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return None;
         }
 
@@ -118,7 +118,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
     }
 
     pub fn peek_front(&self) -> Option<&T> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return None;
         }
         let maybe_uninit = &self.items[self.front];
@@ -128,7 +128,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
 
     pub fn push_front(&mut self, item: T) -> Result<(), ()> {
         debug_assert!(self.len() <= self.items.len(), "{}", DATA_INTEGRITY_ERR_MSG);
-        if self.len() == self.items.len() {
+        if self.is_full() {
             return Err(());
         }
 
@@ -171,7 +171,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
 
     pub fn push_back(&mut self, item: T) -> Result<(), ()> {
         debug_assert!(self.len() <= self.items.len(), "{}", DATA_INTEGRITY_ERR_MSG);
-        if self.len() == self.items.len() {
+        if self.is_full() {
             return Err(());
         }
 
@@ -219,6 +219,24 @@ impl<T, const N: usize> ArrDeque<T, N> {
             },
             num_iterations: 0,
         }
+    }
+}
+
+impl<A, const N: usize> Extend<A> for ArrDeque<A, N> {
+    fn extend<T: IntoIterator<Item = A>>(&mut self, iter: T) {
+        for item in iter {
+            assert!(self.push_back(item).is_ok());
+        }
+    }
+}
+
+impl<A, const N: usize> FromIterator<A> for ArrDeque<A, N> {
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+        let mut arr_deque = Self::new();
+        for item in iter {
+            assert!(arr_deque.push_back(item).is_ok())
+        }
+        arr_deque
     }
 }
 
