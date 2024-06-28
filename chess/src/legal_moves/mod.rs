@@ -10,7 +10,7 @@ mod queen;
 pub(crate) mod rook;
 
 use bishop::LegalBishopMovesIterator;
-use king::LegalKingMovesIterator;
+use king::{LegalKingMovesIterator, CheckStoppingSquaresIterator};
 use knight::LegalKnightMovesIterator;
 use pawn::LegalPawnMovesIterator;
 use queen::LegalQueenMovesIterator;
@@ -27,7 +27,7 @@ pub(crate) struct LegalMovesIterator<'board> {
     queen_moves_iterator: Option<LegalQueenMovesIterator<'board>>,
     king_moves_iterator: LegalKingMovesIterator<'board>,
     king_moves_iterator_finished: bool,
-    check_blocking_squares: Option<[Option<Location>; 8]>,
+    check_blocking_squares: Option<ArrDeque<Location, 8>>,
 }
 
 impl<'board> LegalMovesIterator<'board> {
@@ -111,14 +111,29 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             }
         }
 
-        // lazy calculate whether we are in check.
-        // let is_check = self.king_moves_iterator.is_check(self.player, self.board.kings[self.player.as_index()].0);
-        // println!("Finished calculating is_check: {is_check}");
+        let is_check = self
+            .king_moves_iterator
+            .is_check(self.player, self.board.kings[self.player.as_index()].0);
+        println!("{}", is_check);
+
+        if is_check {
+            self.check_blocking_squares = Some(
+                CheckStoppingSquaresIterator::new(&self.board, self.player, self.board.kings[self.player.as_index()].0)
+                    .collect())
+        }
 
         if let Some(pawn_moves) = &mut self.pawn_moves_iterator {
             let next_pawn_move = pawn_moves.next();
             if next_pawn_move.is_some() {
-                return next_pawn_move;
+                if let Some(blocking) = self.check_blocking_squares.as_ref() {
+                    if blocking.iter().any(|loc| *loc == next_pawn_move.as_ref().unwrap().to) {
+                        return next_pawn_move
+                    } else {
+                        continue;
+                    }
+                } else {
+                    return next_pawn_move;
+                }
             } else {
                 self.pawn_moves_iterator = None;
             }
