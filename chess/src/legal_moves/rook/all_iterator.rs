@@ -1,12 +1,18 @@
-use crate::{ bitboard::BitBoard};
+use crate::bitboard::BitBoard;
 use arr_deque::ArrDeque;
 
 #[derive(Debug, Clone, Copy)]
-enum StraightDirection {
+pub(crate) enum StraightDirection {
     Up,
     Right,
     Down,
     Left,
+}
+
+impl StraightDirection {
+    pub(crate) fn all() -> [StraightDirection; 4] {
+        [Self::Up, Self::Right, Self::Down, Self::Left]
+    }
 }
 
 #[derive(Debug)]
@@ -28,6 +34,22 @@ impl RookMovesIterator {
                 3 => StraightDirection::Left,
                 _ => unreachable!(),
             }),
+        }
+    }
+
+    pub(crate) fn with_directions<T: IntoIterator<Item = StraightDirection>>(
+        directions: T,
+        board: BitBoard,
+    ) -> Self {
+        let mut directions_to_check = ArrDeque::new();
+        for direction in directions {
+            assert!(directions_to_check.push_back(direction).is_ok());
+        }
+
+        Self {
+            original: board.clone(),
+            previous: board,
+            directions_to_check,
         }
     }
 
