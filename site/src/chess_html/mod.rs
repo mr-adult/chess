@@ -49,7 +49,7 @@ pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
             {board_html}
         </div>
         <div style="text-align: center;">
-            <h5 style="margin-bottom: 5px;">"Game Code:"</h5>
+            <h5 style="margin-bottom: 5px;">"Current Position:"</h5>
             <textarea readonly disabled id="game_fen" style="text-align: center; overflow: hidden; width: 400px; resize: none;">
                 {board.to_string()}
             </textarea>
