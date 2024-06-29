@@ -1,3 +1,5 @@
+use std::array::IntoIter;
+
 use chess_common::{Location, Player};
 
 use crate::{
@@ -13,6 +15,8 @@ pub(super) struct LegalCapturesAtLocationIterator<'board> {
     board: &'board Board,
     player_to_move: usize,
     target_square_location: Location,
+    pawn_moves: IntoIter<BitBoard, 2>,
+    pawn_moves_is_done: bool,
     knight_moves: KnightMovesIterator,
     knight_moves_is_done: bool,
     diagonal_moves: BishopMovesIterator,
@@ -37,6 +41,11 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
             player_to_move: player_to_move.as_index(),
             target_square_location: Location::try_from(target)
                 .expect(Location::failed_from_usize_message()),
+            pawn_moves: match player_to_move {
+                Player::White => [target_bb.down_left(), target_bb.down_right()].into_iter(),
+                Player::Black => [target_bb.up_left(), target_bb.up_right()].into_iter(),
+            },
+            pawn_moves_is_done: false,
             knight_moves: KnightMovesIterator::new(target_bb.clone()),
             knight_moves_is_done: false,
             diagonal_moves: BishopMovesIterator::new(target_bb.clone()),
@@ -64,6 +73,20 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.board.assert_board_integrity();
+
+        if !self.pawn_moves_is_done {
+            while let Some(attacking_pawn_square) = self.pawn_moves.next() {
+                if self.board.pawns[self.player_to_move].intersects_with(&attacking_pawn_square) {
+                    return Some(Move {
+                        from: Location::try_from(attacking_pawn_square.0)
+                            .expect(Location::failed_from_usize_message()),
+                        to: self.target_square_location.clone()
+                    });
+                }
+            }
+
+            self.pawn_moves_is_done = true;
+        }
 
         if !self.knight_moves_is_done {
             while let Some(attacking_knight_square) = self.knight_moves.next() {
