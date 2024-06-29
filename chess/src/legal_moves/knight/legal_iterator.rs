@@ -6,6 +6,7 @@ use arr_deque::ArrDeque;
 use super::KnightMovesIterator;
 
 pub(crate) struct LegalKnightMovesIterator<'board> {
+    #[allow(unused)]
     board: &'board Board,
     friendlies: BitBoard,
     locations: Box<dyn Iterator<Item = Location>>,
