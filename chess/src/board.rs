@@ -558,6 +558,33 @@ impl Board {
                     PieceKind::King => {
                         self.kings[player].0 ^= from;
                         self.kings[player].0 ^= to;
+
+                        let from_loc =
+                            Location::try_from(from).expect(Location::failed_from_usize_message());
+                        let to_loc =
+                            Location::try_from(to).expect(Location::failed_from_usize_message());
+
+                        let castle_rank = match player {
+                            white!() => Rank::One,
+                            black!() => Rank::Eight,
+                            _ => unreachable!(),
+                        };
+
+                        if (from_loc.file().as_int() - to_loc.file().as_int()).abs() == 2 {
+                            if to_loc.file() == File::c {
+                                self.rooks[player].0 ^=
+                                    Location::new(File::a, castle_rank).as_u64();
+                                self.rooks[player].0 ^=
+                                    Location::new(File::d, castle_rank).as_u64();
+                            } else if to_loc.file() == File::g {
+                                self.rooks[player].0 ^=
+                                    Location::new(File::h, castle_rank).as_u64();
+                                self.rooks[player].0 ^=
+                                    Location::new(File::f, castle_rank).as_u64();
+                            } else {
+                                panic!("Cannot castle at file {:?}", to_loc.file());
+                            }
+                        }
                     }
                 }
 
