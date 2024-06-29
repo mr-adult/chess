@@ -67,14 +67,14 @@ impl Iterator for BishopMovesIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(direction) = self.directions_to_check.peek_front() {
-            let board = match *direction {
-                DiagonalDirection::UpLeft => self.previous.up_left(),
-                DiagonalDirection::UpRight => self.previous.up_right(),
-                DiagonalDirection::DownLeft => self.previous.down_left(),
-                DiagonalDirection::DownRight => self.previous.down_right(),
-            };
+            match *direction {
+                DiagonalDirection::UpLeft => self.previous = self.previous.up_left(),
+                DiagonalDirection::UpRight => self.previous = self.previous.up_right(),
+                DiagonalDirection::DownLeft => self.previous = self.previous.down_left(),
+                DiagonalDirection::DownRight => self.previous = self.previous.down_right(),
+            }
 
-            if board.0 == 0 {
+            if self.previous.0 == 0 {
                 self.next_direction();
             } else {
                 return Some(self.previous.clone());
