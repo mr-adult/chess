@@ -9,7 +9,6 @@ use chess_common::{File, Rank};
 #[cfg(debug_assertions)]
 use chess_common::Location;
 
-#[derive(Clone)]
 pub(crate) struct BitBoard(
     pub(crate) u64,
     #[allow(unused)]
@@ -99,40 +98,61 @@ impl Default for BitBoard {
 
 impl Debug for BitBoard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut result: [String; 8] = from_fn(|_| String::with_capacity(0));
+        const LEN: usize = 9;
+        const PADDING: usize = 2;
+        let mut result: [String; LEN] = from_fn(|i| {
+            if i == LEN - 1 {
+                "  abcdefgh".to_string()
+            } else {
+                String::with_capacity(0)
+            }
+        });
+
+        let format_byte = |byte: u8| {
+            let mut result = String::with_capacity(8);
+            for file in File::all_files_ascending() {
+                if file.bit_filter() & byte as u64 != 0 {
+                    result.push('1');
+                } else {
+                    result.push('0');
+                }
+            }
+            result
+        };
+
         for rank in Rank::all_ranks_ascending().rev() {
             match rank {
                 Rank::One => {
                     let bits = (self.0 & Rank::one_bit_filter()) as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    result[LEN - rank.as_index() - PADDING] = format!("1 {}", format_byte(bits));
                 }
                 Rank::Two => {
-                    let bits = (self.0 & Rank::two_bit_filter()) >> 8 as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    let bits = ((self.0 & Rank::two_bit_filter()) >> 8) as u8;
+                    result[LEN - rank.as_index() - PADDING] = format!("2 {}", format_byte(bits));
                 }
                 Rank::Three => {
-                    let bits = (self.0 & Rank::three_bit_filter()) >> 16 as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    let bits = ((self.0 & Rank::three_bit_filter()) >> 16) as u8;
+                    result[LEN - rank.as_index() - PADDING] = format!("3 {}", format_byte(bits));
                 }
                 Rank::Four => {
-                    let bits = (self.0 & Rank::four_bit_filter()) >> 24 as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    let bits = ((self.0 & Rank::four_bit_filter()) >> 24) as u8;
+                    result[LEN - rank.as_index() - PADDING] = format!("4 {}", format_byte(bits));
                 }
                 Rank::Five => {
-                    let bits = (self.0 & Rank::five_bit_filter()) >> 32 as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    let bits = ((self.0 & Rank::five_bit_filter()) >> 32) as u8;
+                    result[LEN - rank.as_index() - PADDING] = format!("5 {}", format_byte(bits));
                 }
                 Rank::Six => {
-                    let bits = (self.0 & Rank::six_bit_filter()) >> 40 as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    let bits = ((self.0 & Rank::six_bit_filter()) >> 40) as u8;
+                    result[LEN - rank.as_index() - PADDING] = format!("6 {}", format_byte(bits));
                 }
                 Rank::Seven => {
-                    let bits = (self.0 & Rank::seven_bit_filter()) >> 48 as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    let bits = ((self.0 & Rank::seven_bit_filter()) >> 48) as u8;
+                    result[LEN - rank.as_index() - PADDING] = format!("7 {}", format_byte(bits));
                 }
                 Rank::Eight => {
-                    let bits = (self.0 & Rank::eight_bit_filter()) >> 56 as u8;
-                    result[rank.as_index()] = format!("{:08b}", bits);
+                    let bits = ((self.0 & Rank::eight_bit_filter()) >> 56) as u8;
+                    result[LEN - rank.as_index() - PADDING] = format!("8 {}", format_byte(bits));
                 }
             }
         }
@@ -141,5 +161,11 @@ impl Debug for BitBoard {
         result_string.push_str(&result.join("\n"));
         result_string.push('\n');
         write!(f, "{}", result_string)
+    }
+}
+
+impl Clone for BitBoard {
+    fn clone(&self) -> Self {
+        Self::new(self.0)
     }
 }
