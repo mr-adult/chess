@@ -56,8 +56,33 @@ function onDrop(e) {
 
     var from_rank = dragged.getAttribute("rank") || "";
     var from_rank_int = parseInt(from_rank);
+    var from_file = dragged.getAttribute("file") || "";
+    var to_file = e.target.getAttribute("file") || "";
     var to_rank = e.target.getAttribute("rank") || "";
     var to_rank_int = parseInt(to_rank);
+
+    if (from_rank === "" 
+        || to_rank === "" 
+        || from_file === "" 
+        || to_file === ""
+        || (from_rank === to_rank && from_file === to_file)) {
+        return;
+    }
+
+    var is_legal_move = false;
+    for (var i = 0; i < legalMoves.length; i++) {
+        var move = legalMoves[i];
+        if (move.from.file === from_file
+            && move.from.rank.toString() === from_rank
+            && move.to.file === to_file
+            && move.to.rank.toString() === to_rank) {
+                
+            is_legal_move = true;
+            break;
+        }
+    }
+
+    if (!is_legal_move) { return; }
 
     fetch("/api/v0/make_move", {
         method: "POST",
@@ -68,11 +93,11 @@ function onDrop(e) {
             move: {
                 from: {
                     rank: from_rank_int,
-                    file: dragged.getAttribute("file") || "",
+                    file: from_file,
                 },
                 to: {
                     rank: to_rank_int,
-                    file: e.target.getAttribute("file") || "",
+                    file: to_file,
                 },
             },
             board_fen: board_fen,
