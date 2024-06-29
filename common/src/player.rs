@@ -28,7 +28,7 @@ impl Player {
 
     pub const fn other_player_usize(player: usize) -> usize {
         debug_assert!(player < 2);
-        player + 1 % 2
+        (player + 1) % 2
     }
 }
 
