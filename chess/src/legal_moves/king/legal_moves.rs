@@ -23,7 +23,6 @@ impl<'board> LegalKingMovesIterator<'board> {
         Self {
             board,
             player,
-            king_bitboard: king_bitboard.clone(),
             moves: [
                 king_bitboard.up(),
                 king_bitboard.up_right(),
@@ -35,6 +34,7 @@ impl<'board> LegalKingMovesIterator<'board> {
                 king_bitboard.up_left(),
             ]
             .into_iter(),
+            king_bitboard: king_bitboard,
             friendly_pieces: board.create_mailbox_for_player(player),
             checked_castle_kingside: false,
             checked_castle_queenside: false,
@@ -42,8 +42,18 @@ impl<'board> LegalKingMovesIterator<'board> {
     }
 
     pub(crate) fn is_check(&self, player: Player, king_position: u64) -> bool {
-        let mut iterator =
-            LegalCapturesAtLocationIterator::new(&self.board, player.other_player(), king_position);
+        let player_index = player.as_index();
+        let mut iterator = LegalCapturesAtLocationIterator::new_with_mailbox(
+            &self.board,
+            player.other_player(),
+            king_position,
+            // omit the king from the mailbox so we don't allow a move away from the checking piece back into check
+            self.board.pawns[player_index].0
+                | self.board.knights[player_index].0
+                | self.board.bishops[player_index].0
+                | self.board.rooks[player_index].0
+                | self.board.queens[player_index].0,
+        );
         iterator.next().is_some()
     }
 }
@@ -52,6 +62,8 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.board.assert_board_integrity();
+
         let king_bitboard = self.king_bitboard.clone();
 
         while let Some(king_move) = self.moves.next() {
@@ -63,7 +75,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                 continue;
             }
 
-            if self.is_check(self.player, self.king_bitboard.0) {
+            if self.is_check(self.player, king_move.0) {
                 continue;
             }
 
@@ -74,7 +86,9 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             });
         }
 
-        if self.checked_castle_queenside && self.checked_castle_kingside {
+        if self.is_check(self.player, self.king_bitboard.0)
+            || (self.checked_castle_queenside && self.checked_castle_kingside)
+        {
             return None;
         }
 
