@@ -1,5 +1,5 @@
 use arr_deque::ArrDeque;
-use chess_common::{black, white, Location, Player};
+use chess_common::{Location, Player};
 
 use crate::{Board, Move};
 mod bishop;
@@ -10,7 +10,7 @@ mod queen;
 pub(crate) mod rook;
 
 use bishop::LegalBishopMovesIterator;
-use king::{LegalKingMovesIterator, CheckStoppingSquaresIterator};
+use king::{CheckStoppingSquaresIterator, LegalKingMovesIterator};
 use knight::LegalKnightMovesIterator;
 use pawn::LegalPawnMovesIterator;
 use queen::LegalQueenMovesIterator;
@@ -19,7 +19,6 @@ use rook::LegalRookMovesIterator;
 pub(crate) struct LegalMovesIterator<'board> {
     board: &'board Board,
     player: Player,
-    is_check: Option<bool>,
     pawn_moves_iterator: Option<LegalPawnMovesIterator<'board>>,
     knight_moves_iterator: Option<LegalKnightMovesIterator<'board>>,
     bishop_moves_iterator: Option<LegalBishopMovesIterator<'board>>,
@@ -36,7 +35,6 @@ impl<'board> LegalMovesIterator<'board> {
         Self {
             board,
             player: player_to_move,
-            is_check: None,
             pawn_moves_iterator: Some(LegalPawnMovesIterator::new(board)),
             knight_moves_iterator: Some(LegalKnightMovesIterator::new(board)),
             bishop_moves_iterator: Some(LegalBishopMovesIterator::new(&board)),
@@ -48,38 +46,21 @@ impl<'board> LegalMovesIterator<'board> {
         }
     }
 
-    /// This function calculates all squares where if the piece on
-    /// that square moves, it will result in a check. The rules for
-    /// this are as follows:
-    /// 1. Draw 8 vectors out from the king: one per cardinal direction
-    /// 2. If the vector hits the edge of the board, no check opportunities
-    /// 3. If the vector hits 2 friendly pieces first, no check opportunities
-    /// 4. If the vector hits an enemy piece, it is already a check and we do
-    /// not include it
-    /// 5. If the vector hits a friendly piece then an enemy piece,
-    /// moving the friendly piece will result in a check. These moves
-    /// are included.
-    fn calculate_check_blocking_squares(&mut self) -> () {
-        let defending_piece_mailbox;
-        let attacking_piece_mailbox;
-        let attacking_player;
-        match self.player {
-            Player::White => {
-                defending_piece_mailbox = self.board.create_mailbox_for_player(Player::White);
-                attacking_piece_mailbox = self.board.create_mailbox_for_player(Player::Black);
-                attacking_player = Player::Black.as_index();
-            }
-            Player::Black => {
-                defending_piece_mailbox = self.board.create_mailbox_for_player(Player::Black);
-                attacking_piece_mailbox = self.board.create_mailbox_for_player(Player::White);
-                attacking_player = Player::White.as_index();
+    fn get_next_move_that_blocks_check<T: Iterator<Item = Move>>(
+        check_blocks: &Option<ArrDeque<Location, 8>>,
+        iter: &mut T,
+    ) -> Option<Move> {
+        while let Some(next_move) = iter.next() {
+            if let Some(blocking) = check_blocks.as_ref() {
+                if blocking.iter().any(|loc| *loc == next_move.to) {
+                    return Some(next_move);
+                }
+            } else {
+                return Some(next_move);
             }
         }
 
-        let king_bitboard = match self.player {
-            Player::White => self.board.kings[white!()].0,
-            Player::Black => self.board.kings[black!()].0,
-        };
+        return None;
     }
 }
 
@@ -111,68 +92,69 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             }
         }
 
-        let is_check = self
-            .king_moves_iterator
-            .is_check(self.player, self.board.kings[self.player.as_index()].0);
-        println!("{}", is_check);
-
-        if is_check {
+        if self.check_blocking_squares.is_none()
+            && self
+                .king_moves_iterator
+                .is_check(self.player, self.board.kings[self.player.as_index()].0)
+        {
             self.check_blocking_squares = Some(
-                CheckStoppingSquaresIterator::new(&self.board, self.player, self.board.kings[self.player.as_index()].0)
-                    .collect())
+                CheckStoppingSquaresIterator::new(
+                    &self.board,
+                    self.player,
+                    self.board.kings[self.player.as_index()].0,
+                )
+                .collect(),
+            )
         }
 
         if let Some(pawn_moves) = &mut self.pawn_moves_iterator {
-            let next_pawn_move = pawn_moves.next();
-            if next_pawn_move.is_some() {
-                if let Some(blocking) = self.check_blocking_squares.as_ref() {
-                    if blocking.iter().any(|loc| *loc == next_pawn_move.as_ref().unwrap().to) {
-                        return next_pawn_move
-                    } else {
-                        continue;
-                    }
-                } else {
-                    return next_pawn_move;
-                }
-            } else {
-                self.pawn_moves_iterator = None;
+            let move_to_consider =
+                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, pawn_moves);
+            if move_to_consider.is_some() {
+                return move_to_consider;
             }
+
+            self.pawn_moves_iterator = None;
         }
 
         if let Some(knight_moves) = &mut self.knight_moves_iterator {
-            let next_knight_move = knight_moves.next();
-            if next_knight_move.is_some() {
-                return next_knight_move;
-            } else {
-                self.knight_moves_iterator = None;
+            let move_to_consider =
+                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, knight_moves);
+            if move_to_consider.is_some() {
+                return move_to_consider;
             }
+
+            self.knight_moves_iterator = None;
         }
 
         if let Some(bishop_moves) = &mut self.bishop_moves_iterator {
-            let next_bishop_move = bishop_moves.next();
-            if next_bishop_move.is_some() {
-                return next_bishop_move;
-            } else {
-                self.bishop_moves_iterator = None;
+            let move_to_consider =
+                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, bishop_moves);
+            if move_to_consider.is_some() {
+                return move_to_consider;
             }
+
+            self.bishop_moves_iterator = None;
         }
 
         if let Some(rook_moves) = &mut self.rook_moves_iterator {
-            let next_rook_move = rook_moves.next();
-            if next_rook_move.is_some() {
-                return next_rook_move;
-            } else {
-                self.rook_moves_iterator = None;
+            let move_to_consider =
+                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, rook_moves);
+            if move_to_consider.is_some() {
+                return move_to_consider;
             }
+
+            self.rook_moves_iterator = None;
         }
 
         if let Some(queen_moves) = &mut self.queen_moves_iterator {
-            let next_queen_move = queen_moves.next();
-            if next_queen_move.is_some() {
-                return next_queen_move;
-            } else {
-                self.queen_moves_iterator = None;
+            let move_to_consider =
+                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, queen_moves);
+            if move_to_consider.is_some() {
+                return move_to_consider;
             }
+
+            self.queen_moves_iterator = None;
         }
 
         return None;
@@ -282,6 +264,54 @@ mod tests {
                 .collect::<HashSet<_>>();
 
         assert_move_sets_equal(&expected_legal_moves_from_g8, &actual_legal_moves_from_g8);
+    }
+
+    #[test]
+    fn white_in_check_can_only_make_moves_to_exit_check() {
+        let expected_moves = [
+            // king move out of check
+            Move {
+                from: Location::new(File::e, Rank::One),
+                to: Location::new(File::e, Rank::Two),
+            },
+            // pawn moves to block the queen
+            Move {
+                from: Location::new(File::b, Rank::Two),
+                to: Location::new(File::b, Rank::Four),
+            },
+            Move {
+                from: Location::new(File::c, Rank::Two),
+                to: Location::new(File::c, Rank::Three),
+            },
+            // knight blocks
+            Move {
+                from: Location::new(File::b, Rank::One),
+                to: Location::new(File::d, Rank::Two),
+            },
+            Move {
+                from: Location::new(File::b, Rank::One),
+                to: Location::new(File::c, Rank::Three),
+            },
+            // bishop block
+            Move {
+                from: Location::new(File::c, Rank::One),
+                to: Location::new(File::d, Rank::Two),
+            },
+            // queen block
+            Move {
+                from: Location::new(File::d, Rank::One),
+                to: Location::new(File::d, Rank::Two),
+            },
+        ]
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+        let actual_moves =
+            Board::from_str("rnb1kbnr/pp1ppppp/8/q1p5/3P4/4P3/PPP2PPP/RNBQKBNR w KQkq - 4 3")
+                .unwrap()
+                .legal_moves()
+                .collect::<HashSet<_>>();
+        assert_move_sets_equal(&expected_moves, &actual_moves)
     }
 
     fn assert_move_sets_equal(expected: &HashSet<Move>, actual: &HashSet<Move>) {

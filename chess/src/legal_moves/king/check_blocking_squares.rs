@@ -35,27 +35,15 @@ impl<'board> CheckStoppingSquaresIterator<'board> {
 
         let target_bb = BitBoard::new(target);
 
-        let player_to_move_index = player_to_move.as_index();
+        let bishop_moves_iters = DiagonalDirection::all()
+            .into_iter()
+            .map(|dir| BishopMovesIterator::with_directions([dir], target_bb.clone()))
+            .collect::<ArrDeque<_, 4>>();
 
-        let mut bishop_moves_iters = ArrDeque::new();
-        for direction in DiagonalDirection::all() {
-            assert!(bishop_moves_iters
-                .push_back(BishopMovesIterator::with_directions(
-                    [direction],
-                    board.bishops[player_to_move_index].clone()
-                ))
-                .is_ok())
-        }
-
-        let mut rook_moves_iters = ArrDeque::new();
-        for direction in StraightDirection::all() {
-            assert!(rook_moves_iters
-                .push_back(RookMovesIterator::with_directions(
-                    [direction],
-                    board.rooks[player_to_move_index].clone()
-                ))
-                .is_ok());
-        }
+        let rook_moves_iters = StraightDirection::all()
+            .into_iter()
+            .map(|dir| RookMovesIterator::with_directions([dir], target_bb.clone()))
+            .collect::<ArrDeque<_, 4>>();
 
         Self {
             board,
@@ -108,7 +96,9 @@ impl<'board> Iterator for CheckStoppingSquaresIterator<'board> {
         self.board.assert_board_integrity();
 
         while let Some(attacking_knight_square) = self.knight_moves.next() {
-            if self.board.knights[self.player_to_move].intersects_with_u64(self.target_square) {
+            if self.board.knights[Player::other_player_usize(self.player_to_move)]
+                .intersects_with_u64(self.target_square)
+            {
                 let mut resolution = ArrDeque::<_, 1>::new();
                 assert!(resolution.push_back(attacking_knight_square).is_ok());
                 if !self.resolve_into_result(resolution) {
@@ -119,13 +109,31 @@ impl<'board> Iterator for CheckStoppingSquaresIterator<'board> {
 
         while let Some(bishop_moves_iter) = self.diagonal_moves.pop_front() {
             let bishop_moves = bishop_moves_iter.collect::<ArrDeque<_, 7>>();
-            let has_attacking_bishop = bishop_moves.iter().any(|bishop_square| {
-                self.board.bishops[self.player_to_move].intersects_with(bishop_square)
-                    || self.board.queens[self.player_to_move].intersects_with(bishop_square)
-            });
+            let mut attacking_index = 0;
+            let mut has_attacking_bishop = false;
+            for (i, bishop_square) in bishop_moves.iter().enumerate() {
+                if self.board.bishops[Player::other_player_usize(self.player_to_move)]
+                    .intersects_with(bishop_square)
+                    || self.board.queens[Player::other_player_usize(self.player_to_move)]
+                        .intersects_with(bishop_square)
+                {
+                    attacking_index = i;
+                    has_attacking_bishop = true;
+                    break;
+                }
+
+                if self.board.mailbox.intersects_with(bishop_square) {
+                    break;
+                }
+            }
 
             if has_attacking_bishop {
-                if !self.resolve_into_result(bishop_moves) {
+                if !self.resolve_into_result(
+                    bishop_moves
+                        .into_iter()
+                        .take(attacking_index + 1)
+                        .collect::<ArrDeque<_, 7>>(),
+                ) {
                     return None;
                 }
             }
@@ -133,13 +141,30 @@ impl<'board> Iterator for CheckStoppingSquaresIterator<'board> {
 
         while let Some(rook_moves_iter) = self.straight_moves.pop_front() {
             let rook_moves = rook_moves_iter.collect::<ArrDeque<_, 7>>();
-            let has_attacking_rook = rook_moves.iter().any(|rook_square| {
-                self.board.rooks[self.player_to_move].intersects_with(rook_square)
-                    || self.board.queens[self.player_to_move].intersects_with(rook_square)
-            });
+            let mut attacking_index = 0;
+            let mut has_attacking_rook = false;
+            for (i, rook_square) in rook_moves.iter().enumerate() {
+                if self.board.rooks[Player::other_player_usize(self.player_to_move)]
+                    .intersects_with(rook_square)
+                    || self.board.queens[Player::other_player_usize(self.player_to_move)]
+                        .intersects_with(rook_square)
+                {
+                    attacking_index = i;
+                    has_attacking_rook = true;
+                }
+
+                if self.board.mailbox.intersects_with(rook_square) {
+                    break;
+                }
+            }
 
             if has_attacking_rook {
-                if !self.resolve_into_result(rook_moves) {
+                if !self.resolve_into_result(
+                    rook_moves
+                        .into_iter()
+                        .take(attacking_index + 1)
+                        .collect::<ArrDeque<_, 7>>(),
+                ) {
                     return None;
                 }
             }
