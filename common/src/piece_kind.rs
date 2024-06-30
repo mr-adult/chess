@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+use serde::Deserialize;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
 pub enum PieceKind {
     Pawn,
     Knight,

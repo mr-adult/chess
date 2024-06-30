@@ -1,3 +1,17 @@
+#[macro_export]
+macro_rules! white {
+    () => {
+        0_usize
+    };
+}
+
+#[macro_export]
+macro_rules! black {
+    () => {
+        1_usize
+    };
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Player {
     Black,
@@ -32,16 +46,13 @@ impl Player {
     }
 }
 
-#[macro_export]
-macro_rules! white {
-    () => {
-        0_usize
-    };
-}
-
-#[macro_export]
-macro_rules! black {
-    () => {
-        1_usize
-    };
+impl TryFrom<usize> for Player {
+    type Error = ();
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            white!() => Ok(Player::White),
+            black!() => Ok(Player::Black),
+            _ => Err(()),
+        }
+    }
 }
