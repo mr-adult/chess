@@ -15,8 +15,15 @@ var dragged;
 /** @type {PossibleMove[]} */
 var legalMoves = [];
 
+function getBoardFEN() {
+    var element = document.querySelector("#game_fen");
+    if (!element) { return null; }
+    let game_board = element.textContent;
+    return game_board;
+};
+
 function updateLegalMoves() {
-    let game_board = document.querySelector("#game_fen").textContent;
+    let game_board = getBoardFEN();
     let url = "/api/v0/legal_moves?board_fen=" + encodeURI(game_board);
     fetch(url, {
         method: "GET"
@@ -34,6 +41,17 @@ function updateLegalMoves() {
             console.error(err);
         });
 };
+
+function replaceBoard(newBoardHtml, updateLegalMoves) {
+    if (!newBoardHtml || newBoardHtml.length === 0) { return; }
+    unbindBoardEventListeners();
+    document.getElementById("game_state_wrapper").innerHTML = newBoardHtml; 
+
+    if (updateLegalMoves) {
+        updateLegalMoves();
+    }
+    bindBoardEventListeners();
+}
 
 function onDragStart(e) {
     var file = e.target.getAttribute("file");
@@ -171,14 +189,7 @@ function onDrop(e) {
         },
         body: JSON.stringify(payload),
     }).then(function (res) { return res.text() })
-        .then(function (text) {
-            if (text == null || text.length == 0) { return; }
-            unbindBoardEventListeners();
-            document.getElementById("game_state_wrapper").innerHTML = text
-
-            updateLegalMoves();
-            bindBoardEventListeners();
-        })
+        .then(function (text) { replaceBoard(text, true); })
         .catch(function (err) { console.error(err); });
 
     e.stopPropagation();
