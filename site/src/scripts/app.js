@@ -184,6 +184,13 @@ function onDrop(e) {
     e.stopPropagation();
 }
 
+function onDragEnd() {
+    document.querySelectorAll(".legal_move_square")
+        .forEach(function (legal_move_square) {
+            legal_move_square.classList.remove("legal_move_square");
+        });
+}
+
 function bindBoardEventListeners() {
     document.querySelectorAll(".piece_drag_target")
         .forEach(function (target) {
@@ -206,3 +213,5 @@ window.addEventListener("load", function (e) {
     bindBoardEventListeners();
     updateLegalMoves();
 });
+
+window.addEventListener("dragend", onDragEnd);
