@@ -16,7 +16,7 @@ use pawn::LegalPawnMovesIterator;
 use queen::LegalQueenMovesIterator;
 use rook::LegalRookMovesIterator;
 
-pub(crate) struct LegalMovesIterator<'board> {
+pub struct LegalMovesIterator<'board> {
     board: &'board Board,
     player: Player,
     pawn_moves_iterator: Option<LegalPawnMovesIterator<'board>>,

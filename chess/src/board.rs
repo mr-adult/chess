@@ -9,10 +9,8 @@ use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank}
 use chess_parsers::{parse_fen, BoardLayout, FenErr};
 
 use crate::{
-    bitboard::BitBoard,
-    chess_move::{PossibleMove, SelectedMove},
-    legal_moves::LegalMovesIterator,
-    Move,
+    bitboard::BitBoard, chess_move::SelectedMove, legal_moves::LegalMovesIterator,
+    possible_moves::PossibleMovesIterator, Move,
 };
 
 #[derive(Debug)]
@@ -475,8 +473,12 @@ impl Board {
         result
     }
 
-    pub fn legal_moves<'a>(&'a self) -> impl Iterator<Item = PossibleMove> + 'a {
+    pub fn legal_moves<'board>(&'board self) -> LegalMovesIterator<'board> {
         LegalMovesIterator::for_board(self)
+    }
+
+    pub fn possible_moves<'board>(&'board self) -> PossibleMovesIterator<'board> {
+        PossibleMovesIterator::new(self.legal_moves())
     }
 
     pub fn make_move(&mut self, move_: SelectedMove) -> Result<(), ()> {
@@ -620,6 +622,18 @@ impl Board {
             }
         }
     }
+
+    pub fn undo(&mut self) -> Result<(), UndoErr> {
+        if self.history.is_empty() {
+            return Err(UndoErr::NoMoveInHistory);
+        } else {
+            return Ok(());
+        }
+    }
+}
+
+pub enum UndoErr {
+    NoMoveInHistory,
 }
 
 impl Default for Board {
