@@ -80,7 +80,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     return Some(Move {
                         from: Location::try_from(attacking_pawn_square.0)
                             .expect(Location::failed_from_usize_message()),
-                        to: self.target_square_location.clone()
+                        to: self.target_square_location.clone(),
                     });
                 }
             }

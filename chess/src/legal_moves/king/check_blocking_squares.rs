@@ -1,3 +1,5 @@
+use std::array::IntoIter;
+
 use arr_deque::ArrDeque;
 use chess_common::{Location, Player};
 
@@ -19,7 +21,10 @@ pub(crate) struct CheckStoppingSquaresIterator<'board> {
     #[allow(unused)]
     #[cfg(debug_assertions)]
     target_square_location: Location,
+    pawn_moves: IntoIter<BitBoard, 2>,
+    pawn_moves_is_done: bool,
     knight_moves: KnightMovesIterator,
+    knight_moves_is_done: bool,
     diagonal_moves: ArrDeque<BishopMovesIterator, 4>,
     straight_moves: ArrDeque<RookMovesIterator, 4>,
     result: ArrDeque<Location, 7>,
@@ -52,7 +57,13 @@ impl<'board> CheckStoppingSquaresIterator<'board> {
             #[cfg(debug_assertions)]
             target_square_location: Location::try_from(target)
                 .expect(Location::failed_from_usize_message()),
+            pawn_moves: match player_to_move {
+                Player::White => [target_bb.up_left(), target_bb.up_right()].into_iter(),
+                Player::Black => [target_bb.down_left(), target_bb.down_right()].into_iter(),
+            },
+            pawn_moves_is_done: false,
             knight_moves: KnightMovesIterator::new(target_bb.clone()),
+            knight_moves_is_done: false,
             diagonal_moves: bishop_moves_iters,
             straight_moves: rook_moves_iters,
             result: ArrDeque::new(),
@@ -95,16 +106,36 @@ impl<'board> Iterator for CheckStoppingSquaresIterator<'board> {
 
         self.board.assert_board_integrity();
 
-        while let Some(attacking_knight_square) = self.knight_moves.next() {
-            if self.board.knights[Player::other_player_usize(self.player_to_move)]
-                .intersects_with_u64(self.target_square)
-            {
-                let mut resolution = ArrDeque::<_, 1>::new();
-                assert!(resolution.push_back(attacking_knight_square).is_ok());
-                if !self.resolve_into_result(resolution) {
-                    return None;
+        if !self.pawn_moves_is_done {
+            while let Some(attacking_pawn_square) = self.pawn_moves.next() {
+                if self.board.pawns[Player::other_player_usize(self.player_to_move)]
+                    .intersects_with(&attacking_pawn_square)
+                {
+                    let mut resolution = ArrDeque::<_, 1>::new();
+                    assert!(resolution.push_back(attacking_pawn_square).is_ok());
+                    if !self.resolve_into_result(resolution) {
+                        return None;
+                    }
                 }
             }
+
+            self.pawn_moves_is_done = true;
+        }
+
+        if !self.knight_moves_is_done {
+            while let Some(attacking_knight_square) = self.knight_moves.next() {
+                if self.board.knights[Player::other_player_usize(self.player_to_move)]
+                    .intersects_with_u64(self.target_square)
+                {
+                    let mut resolution = ArrDeque::<_, 1>::new();
+                    assert!(resolution.push_back(attacking_knight_square).is_ok());
+                    if !self.resolve_into_result(resolution) {
+                        return None;
+                    }
+                }
+            }
+
+            self.knight_moves_is_done = true;
         }
 
         while let Some(bishop_moves_iter) = self.diagonal_moves.pop_front() {
