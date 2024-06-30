@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chess_core::{Board, Move};
+use chess_core::{Board, Move, PossibleMove, SelectedMove};
 use http::StatusCode;
 use serde::Deserialize;
 
@@ -20,7 +20,7 @@ pub(crate) fn create_api_router() -> Router {
 
 async fn get_legal_moves_handler(
     req: Query<LegalMovesRequest>,
-) -> Result<Json<Vec<Move>>, StatusCode> {
+) -> Result<Json<Vec<PossibleMove>>, StatusCode> {
     println!("{}", req.board_fen);
     let board = Board::from_str(&req.board_fen).map_err(|_| StatusCode::BAD_REQUEST)?;
     Ok(Json(board.legal_moves().collect::<Vec<_>>()))
@@ -43,5 +43,5 @@ async fn make_move_handler(req: Json<MakeMovesRequest>) -> Result<Html<String>, 
 struct MakeMovesRequest {
     board_fen: String,
     #[serde(alias = "move")]
-    move_: Move,
+    move_: SelectedMove,
 }
