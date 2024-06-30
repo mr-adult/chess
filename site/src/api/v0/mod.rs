@@ -10,7 +10,7 @@ use chess_core::{Board, PossibleMove, SelectedMove};
 use http::StatusCode;
 use serde::Deserialize;
 
-use crate::chess_html::render_gameboard;
+use crate::{chess_html::render_gameboard, common::FenRequest};
 
 pub(crate) fn create_api_router() -> Router {
     Router::new()
@@ -19,16 +19,11 @@ pub(crate) fn create_api_router() -> Router {
 }
 
 async fn get_legal_moves_handler(
-    req: Query<LegalMovesRequest>,
+    req: Query<FenRequest>,
 ) -> Result<Json<Vec<PossibleMove>>, StatusCode> {
-    println!("{}", req.board_fen);
+    println!("{}", req.0.board_fen);
     let board = Board::from_str(&req.board_fen).map_err(|_| StatusCode::BAD_REQUEST)?;
     Ok(Json(board.legal_moves().collect::<Vec<_>>()))
-}
-
-#[derive(Deserialize)]
-struct LegalMovesRequest {
-    board_fen: String,
 }
 
 async fn make_move_handler(req: Json<MakeMovesRequest>) -> Result<Html<String>, StatusCode> {

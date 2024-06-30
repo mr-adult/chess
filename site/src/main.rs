@@ -17,6 +17,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 mod api;
 mod auth;
 mod chess_html;
+mod common;
 
 const TOKEN_EXPIRATION_TIME_SECS: usize = 1800; // 30 mins
 
@@ -39,6 +40,7 @@ async fn main() {
         .route("/", get(home))
         .route("/login", post(auth::login_handler))
         .nest_service("/api/v0", api::create_api_router())
+        .nest_service("/html/v0", chess_html::create_ssr_router())
         .nest_service("/styles", ServeDir::new("src/styles"))
         .nest_service("/scripts", ServeDir::new("src/scripts"))
         .nest_service("/favicon.ico", ServeFile::new("src/favicon.ico"))
