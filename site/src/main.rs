@@ -9,7 +9,7 @@ use http::Method;
 use tower_cookies::CookieManagerLayer;
 use tower_http::{
     cors::{Any, CorsLayer},
-    services::ServeDir,
+    services::{ServeDir, ServeFile},
 };
 
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -41,6 +41,7 @@ async fn main() {
         .nest_service("/api/v0", api::create_api_router())
         .nest_service("/styles", ServeDir::new("src/styles"))
         .nest_service("/scripts", ServeDir::new("src/scripts"))
+        .nest_service("/favicon.ico", ServeFile::new("src/favicon.ico"))
         .layer(
             // Add CORS so it doesn't block our requests from the browser
             CorsLayer::new()
@@ -101,6 +102,7 @@ async fn home(state: State<AppState>) -> Html<String> {
         <!DOCTYPE html>
         <head>
             <title>"Chess"</title>
+            <link rel="icon" type="image/x-icon" href="/favicon.ico" />
             <meta charset="UTF-8" />
             <meta name="description" content="A chess website" />
             <link rel="stylesheet" href="/styles/app.css" />
