@@ -42,12 +42,12 @@ function updateLegalMoves() {
         });
 };
 
-function replaceBoard(newBoardHtml, updateLegalMoves) {
+function replaceBoard(newBoardHtml, shouldUpdateLegalMoves) {
     if (!newBoardHtml || newBoardHtml.length === 0) { return; }
     unbindBoardEventListeners();
     document.getElementById("game_state_wrapper").innerHTML = newBoardHtml; 
 
-    if (updateLegalMoves) {
+    if (shouldUpdateLegalMoves) {
         updateLegalMoves();
     }
     bindBoardEventListeners();
