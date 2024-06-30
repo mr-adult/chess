@@ -52,7 +52,15 @@ impl<'board> LegalKingMovesIterator<'board> {
                 | self.board.knights[player_index].0
                 | self.board.bishops[player_index].0
                 | self.board.rooks[player_index].0
-                | self.board.queens[player_index].0,
+                | self.board.queens[player_index].0
+                | self
+                    .board
+                    .create_mailbox_for_player(
+                        Player::try_from(player_index)
+                            .expect("Player to never fail to map")
+                            .other_player(),
+                    )
+                    .0,
         );
         iterator.next().is_some()
     }
