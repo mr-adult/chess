@@ -1,7 +1,7 @@
 use arr_deque::ArrDeque;
-use chess_common::{Location, Player};
+use chess_common::{Location, Player, Rank};
 
-use crate::{Board, Move};
+use crate::{chess_move::PossibleMove, Board, Move};
 mod bishop;
 mod king;
 mod knight;
@@ -65,7 +65,7 @@ impl<'board> LegalMovesIterator<'board> {
 }
 
 impl<'board> Iterator for LegalMovesIterator<'board> {
-    type Item = Move;
+    type Item = PossibleMove;
 
     /// The rules for a next legal move are as follows:
     /// 1. calculate any legal king moves first since we
@@ -85,10 +85,9 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
     fn next(&mut self) -> Option<Self::Item> {
         if !self.king_moves_iterator_finished {
             let next_king_move = self.king_moves_iterator.next();
-            if next_king_move.is_some() {
-                return next_king_move;
-            } else {
-                self.king_moves_iterator_finished = true;
+            match next_king_move {
+                None => self.king_moves_iterator_finished = true,
+                Some(move_) => return Some(PossibleMove::Normal { move_ }),
             }
         }
 
@@ -110,51 +109,57 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         if let Some(pawn_moves) = &mut self.pawn_moves_iterator {
             let move_to_consider =
                 Self::get_next_move_that_blocks_check(&self.check_blocking_squares, pawn_moves);
-            if move_to_consider.is_some() {
-                return move_to_consider;
-            }
 
-            self.pawn_moves_iterator = None;
+            match move_to_consider {
+                None => self.pawn_moves_iterator = None,
+                Some(move_) => {
+                    if move_.to.rank() == Rank::One || move_.to.rank() == Rank::Eight {
+                        return Some(PossibleMove::Promotion { move_ });
+                    } else {
+                        return Some(PossibleMove::Normal { move_ });
+                    }
+                }
+            }
         }
 
         if let Some(knight_moves) = &mut self.knight_moves_iterator {
             let move_to_consider =
                 Self::get_next_move_that_blocks_check(&self.check_blocking_squares, knight_moves);
-            if move_to_consider.is_some() {
-                return move_to_consider;
-            }
 
-            self.knight_moves_iterator = None;
+            match move_to_consider {
+                None => self.knight_moves_iterator = None,
+                Some(move_) => return Some(PossibleMove::Normal { move_ }),
+            }
         }
 
         if let Some(bishop_moves) = &mut self.bishop_moves_iterator {
             let move_to_consider =
                 Self::get_next_move_that_blocks_check(&self.check_blocking_squares, bishop_moves);
-            if move_to_consider.is_some() {
-                return move_to_consider;
-            }
 
-            self.bishop_moves_iterator = None;
+            match move_to_consider {
+                None => self.bishop_moves_iterator = None,
+                Some(move_) => return Some(PossibleMove::Normal { move_ }),
+            }
         }
 
         if let Some(rook_moves) = &mut self.rook_moves_iterator {
             let move_to_consider =
                 Self::get_next_move_that_blocks_check(&self.check_blocking_squares, rook_moves);
-            if move_to_consider.is_some() {
-                return move_to_consider;
-            }
 
-            self.rook_moves_iterator = None;
+            match move_to_consider {
+                None => self.rook_moves_iterator = None,
+                Some(move_) => return Some(PossibleMove::Normal { move_ }),
+            }
         }
 
         if let Some(queen_moves) = &mut self.queen_moves_iterator {
             let move_to_consider =
                 Self::get_next_move_that_blocks_check(&self.check_blocking_squares, queen_moves);
-            if move_to_consider.is_some() {
-                return move_to_consider;
-            }
 
-            self.queen_moves_iterator = None;
+            match move_to_consider {
+                None => self.queen_moves_iterator = None,
+                Some(move_) => return Some(PossibleMove::Normal { move_ }),
+            }
         }
 
         return None;
@@ -198,7 +203,10 @@ mod tests {
             .chain(knight_two_moves)
             .collect::<HashSet<_>>();
 
-        let actual_legal_moves = Board::default().legal_moves().collect::<HashSet<_>>();
+        let actual_legal_moves = Board::default()
+            .legal_moves()
+            .map(|possible_move| possible_move.move_().clone())
+            .collect::<HashSet<_>>();
         assert_move_sets_equal(&expected_legal_moves, &actual_legal_moves);
     }
 
@@ -236,6 +244,7 @@ mod tests {
             Board::from_str("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 1 1")
                 .unwrap()
                 .legal_moves()
+                .map(|possible_move| possible_move.move_().clone())
                 .collect::<HashSet<_>>();
 
         assert_move_sets_equal(&expected_legal_moves, &actual_legal_moves);
@@ -260,6 +269,7 @@ mod tests {
             Board::from_str("rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 3 2")
                 .unwrap()
                 .legal_moves()
+                .map(|possible_move| possible_move.move_().clone())
                 .filter(|move_| move_.from == Location::new(File::g, Rank::Eight))
                 .collect::<HashSet<_>>();
 
@@ -310,6 +320,7 @@ mod tests {
             Board::from_str("rnb1kbnr/pp1ppppp/8/q1p5/3P4/4P3/PPP2PPP/RNBQKBNR w KQkq - 4 3")
                 .unwrap()
                 .legal_moves()
+                .map(|possible_move| possible_move.move_().clone())
                 .collect::<HashSet<_>>();
         assert_move_sets_equal(&expected_moves, &actual_moves)
     }

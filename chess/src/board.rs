@@ -8,7 +8,12 @@ use std::{
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{parse_fen, BoardLayout, FenErr};
 
-use crate::{bitboard::BitBoard, legal_moves::LegalMovesIterator, Move};
+use crate::{
+    bitboard::BitBoard,
+    chess_move::{PossibleMove, SelectedMove},
+    legal_moves::LegalMovesIterator,
+    Move,
+};
 
 #[derive(Debug)]
 pub struct ErgonomicBoard {
@@ -470,18 +475,32 @@ impl Board {
         result
     }
 
-    pub fn legal_moves<'a>(&'a self) -> impl Iterator<Item = Move> + 'a {
+    pub fn legal_moves<'a>(&'a self) -> impl Iterator<Item = PossibleMove> + 'a {
         LegalMovesIterator::for_board(self)
     }
 
-    pub fn make_move(&mut self, move_: Move) -> Result<(), ()> {
-        if !self.legal_moves().any(|legal_move| legal_move == move_) {
+    pub fn make_move(&mut self, move_: SelectedMove) -> Result<(), ()> {
+        if !self
+            .legal_moves()
+            .any(|legal_move| *legal_move.move_() == *move_.move_())
+        {
             return Err(());
         }
 
+        let promotion_kind = move_.promotion_kind();
+        // Can't promote to king or pawn!
+        if let Some(PieceKind::King | PieceKind::Pawn) = promotion_kind {
+            return Err(());
+        }
+
+        let move_ = move_.move_();
         match self.at(move_.from) {
             None => Err(()),
             Some(piece_to_move) => {
+                if promotion_kind.is_some() && piece_to_move.kind() != PieceKind::Pawn {
+                    return Err(());
+                }
+
                 let player_to_move = piece_to_move.player();
                 let to = move_.to.as_u64();
 
@@ -537,7 +556,14 @@ impl Board {
                 match piece_to_move.kind() {
                     PieceKind::Pawn => {
                         self.pawns[player].0 ^= from;
-                        self.pawns[player].0 ^= to;
+                        match promotion_kind.unwrap_or(PieceKind::Pawn) {
+                            PieceKind::Pawn => self.pawns[player].0 ^= to,
+                            PieceKind::Knight => self.knights[player].0 ^= to,
+                            PieceKind::Bishop => self.bishops[player].0 ^= to,
+                            PieceKind::Rook => self.rooks[player].0 ^= to,
+                            PieceKind::Queen => self.queens[player].0 ^= to,
+                            PieceKind::King => unreachable!(),
+                        }
                     }
                     PieceKind::Knight => {
                         self.knights[player].0 ^= from;
@@ -588,7 +614,7 @@ impl Board {
                     }
                 }
 
-                self.history.push(move_);
+                self.history.push(move_.clone());
                 self.update_mailbox();
                 return Ok(());
             }
