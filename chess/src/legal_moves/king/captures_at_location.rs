@@ -23,6 +23,8 @@ pub(super) struct LegalCapturesAtLocationIterator<'board> {
     diagonal_moves_is_done: bool,
     straight_moves: RookMovesIterator,
     straight_moves_is_done: bool,
+    king_moves: IntoIter<BitBoard, 8>,
+    king_moves_is_done: bool,
     mailbox: BitBoard,
 }
 
@@ -35,6 +37,17 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
         );
 
         let target_bb = BitBoard::new(target);
+        let king_moves = [
+            target_bb.up(),
+            target_bb.up_right(),
+            target_bb.right(),
+            target_bb.down_right(),
+            target_bb.down(),
+            target_bb.down_left(),
+            target_bb.left(),
+            target_bb.up_left(),
+        ]
+        .into_iter();
 
         Self {
             board,
@@ -52,7 +65,9 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
             diagonal_moves_is_done: false,
             straight_moves: RookMovesIterator::new(target_bb),
             straight_moves_is_done: false,
-            mailbox: board.create_mailbox_for_player(player_to_move),
+            king_moves,
+            king_moves_is_done: false,
+            mailbox: board.mailbox.clone(),
         }
     }
 
@@ -99,6 +114,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     });
                 }
             }
+
             self.knight_moves_is_done = true;
         }
 
@@ -144,6 +160,20 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
             }
 
             self.straight_moves_is_done = true;
+        }
+
+        if !self.king_moves_is_done {
+            while let Some(king_move) = self.king_moves.next() {
+                if self.board.kings[self.player_to_move].intersects_with(&king_move) {
+                    return Some(Move {
+                        from: Location::try_from(king_move.0)
+                            .expect(Location::failed_from_usize_message()),
+                        to: self.target_square_location.clone(),
+                    });
+                }
+            }
+
+            self.king_moves_is_done = true;
         }
 
         return None;
