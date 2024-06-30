@@ -83,6 +83,10 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                             to: Location::try_from(new_location.0).unwrap(),
                         });
                     }
+
+                    if let Some(lookahead) = self.lookahead.pop_front() {
+                        return Some(lookahead);
+                    }
                 }
                 Player::Black => {
                     let new_location = location_bb.down();
@@ -130,6 +134,10 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                             to: Location::try_from(new_location.0)
                                 .expect(Location::failed_from_usize_message()),
                         });
+                    }
+
+                    if let Some(lookahead) = self.lookahead.pop_front() {
+                        return Some(lookahead);
                     }
                 }
             }
