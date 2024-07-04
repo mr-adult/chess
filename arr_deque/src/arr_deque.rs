@@ -305,7 +305,7 @@ impl<T, const N: usize> IntoIterator for ArrDeque<T, N> {
 
     fn into_iter(mut self) -> Self::IntoIter {
         let indexes = self.active_indexes();
-        // We're handling control of the objects over to the caller, so we need
+        // We're handing control of the objects over to the caller, so we need
         // to not call the destructor on them.
         self.len = 0;
         self.back = if self.front == 0 {
