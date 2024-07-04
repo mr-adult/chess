@@ -9,12 +9,16 @@ pub struct Piece {
 }
 
 impl Piece {
-    pub fn new(player: Player, kind: PieceKind) -> Self {
+    pub const fn new(player: Player, kind: PieceKind) -> Self {
         Self { kind, player }
     }
 
     pub const fn kind(&self) -> PieceKind {
         self.kind
+    }
+
+    pub const fn kind_ref(&self) -> &PieceKind {
+        &self.kind
     }
 
     pub const fn player(&self) -> Player {
