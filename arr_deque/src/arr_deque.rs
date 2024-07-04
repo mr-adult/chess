@@ -1,11 +1,7 @@
 use std::{
-    array::from_fn,
-    mem::MaybeUninit,
-    ops::{Index, IndexMut},
-    usize,
+    array::from_fn, fmt::Debug, mem::MaybeUninit, ops::{Index, IndexMut}, usize
 };
 
-#[derive(Debug)]
 pub struct ArrDeque<T, const N: usize> {
     /// The backing array of this ArrDeque.
     items: [MaybeUninit<T>; N],
@@ -397,6 +393,31 @@ impl<'deque, T, const N: usize> Iterator for Iter<'deque, T, N> {
             return Some(value);
         }
         return None;
+    }
+}
+
+impl<T, const N: usize> Debug for ArrDeque<T, N> 
+    where T: Debug {
+    
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.len() == 0 {
+            return write!(f, "[]");
+        }
+
+        write!(f, "[")?;
+
+        let mut i = 0;
+        for item in self {
+            if i != 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{item:?}")?;
+
+            i += 1;
+        }
+
+        write!(f, "]")?;
+        Ok(())
     }
 }
 
