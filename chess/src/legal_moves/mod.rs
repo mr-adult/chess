@@ -10,7 +10,7 @@ mod queen;
 pub(crate) mod rook;
 
 use bishop::LegalBishopMovesIterator;
-use king::{CheckStoppingSquaresIterator, LegalKingMovesIterator};
+use king::{CheckStoppingSquaresIterator, KingProtectingLocationsIterator, LegalKingMovesIterator};
 use knight::LegalKnightMovesIterator;
 use pawn::LegalPawnMovesIterator;
 use queen::LegalQueenMovesIterator;
@@ -27,6 +27,7 @@ pub(crate) struct LegalMovesIterator<'board> {
     king_moves_iterator: LegalKingMovesIterator<'board>,
     king_moves_iterator_finished: bool,
     check_blocking_squares: Option<ArrDeque<Location, 8>>,
+    king_protecting_squares: Option<ArrDeque<Location, 8>>,
 }
 
 impl<'board> LegalMovesIterator<'board> {
@@ -43,7 +44,25 @@ impl<'board> LegalMovesIterator<'board> {
             king_moves_iterator: LegalKingMovesIterator::new(board, player_to_move),
             king_moves_iterator_finished: false,
             check_blocking_squares: None,
+            king_protecting_squares: None,
         }
+    }
+
+    fn get_next_move_that_meets_check_constraints<T: Iterator<Item = Move>>(
+        king_protecting: &ArrDeque<Location, 8>,
+        check_blocks: &Option<ArrDeque<Location, 8>>,
+        iter: &mut T,
+    ) -> Option<Move> {
+        while let Some(move_) = Self::get_next_move_that_blocks_check(check_blocks, iter) {
+            if king_protecting
+                .iter()
+                .any(|protecting| move_.from == *protecting)
+            {
+                continue;
+            }
+            return Some(move_);
+        }
+        return None;
     }
 
     fn get_next_move_that_blocks_check<T: Iterator<Item = Move>>(
@@ -106,9 +125,23 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             )
         }
 
+        if self.king_protecting_squares.is_none() {
+            self.king_protecting_squares = Some(
+                KingProtectingLocationsIterator::new(
+                    self.board,
+                    self.player,
+                    self.board.kings[self.player.as_index()].0,
+                )
+                .collect(),
+            );
+        }
+
         if let Some(pawn_moves) = &mut self.pawn_moves_iterator {
-            let move_to_consider =
-                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, pawn_moves);
+            let move_to_consider = Self::get_next_move_that_meets_check_constraints(
+                &self.king_protecting_squares.as_ref().unwrap(),
+                &self.check_blocking_squares,
+                pawn_moves,
+            );
 
             match move_to_consider {
                 None => self.pawn_moves_iterator = None,
@@ -123,8 +156,11 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         if let Some(knight_moves) = &mut self.knight_moves_iterator {
-            let move_to_consider =
-                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, knight_moves);
+            let move_to_consider = Self::get_next_move_that_meets_check_constraints(
+                &self.king_protecting_squares.as_ref().unwrap(),
+                &self.check_blocking_squares,
+                knight_moves,
+            );
 
             match move_to_consider {
                 None => self.knight_moves_iterator = None,
@@ -133,8 +169,11 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         if let Some(bishop_moves) = &mut self.bishop_moves_iterator {
-            let move_to_consider =
-                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, bishop_moves);
+            let move_to_consider = Self::get_next_move_that_meets_check_constraints(
+                &self.king_protecting_squares.as_ref().unwrap(),
+                &self.check_blocking_squares,
+                bishop_moves,
+            );
 
             match move_to_consider {
                 None => self.bishop_moves_iterator = None,
@@ -143,8 +182,11 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         if let Some(rook_moves) = &mut self.rook_moves_iterator {
-            let move_to_consider =
-                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, rook_moves);
+            let move_to_consider = Self::get_next_move_that_meets_check_constraints(
+                &self.king_protecting_squares.as_ref().unwrap(),
+                &self.check_blocking_squares,
+                rook_moves,
+            );
 
             match move_to_consider {
                 None => self.rook_moves_iterator = None,
@@ -153,8 +195,11 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         if let Some(queen_moves) = &mut self.queen_moves_iterator {
-            let move_to_consider =
-                Self::get_next_move_that_blocks_check(&self.check_blocking_squares, queen_moves);
+            let move_to_consider = Self::get_next_move_that_meets_check_constraints(
+                &self.king_protecting_squares.as_ref().unwrap(),
+                &self.check_blocking_squares,
+                queen_moves,
+            );
 
             match move_to_consider {
                 None => self.queen_moves_iterator = None,
