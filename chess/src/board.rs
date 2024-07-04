@@ -481,26 +481,42 @@ impl Board {
         PossibleMovesIterator::new(self.legal_moves())
     }
 
-    pub fn make_move(&mut self, move_: SelectedMove) -> Result<(), ()> {
+    /// Makes the selected move.
+    /// 
+    /// If the move is not valid, returns an Error with the reason it is invalid.
+    pub fn make_move(&mut self, move_: SelectedMove) -> Result<(), MoveErr> {
         if !self
             .legal_moves()
             .any(|legal_move| *legal_move.move_() == *move_.move_())
         {
-            return Err(());
+            return Err(MoveErr::IllegalMove);
         }
 
+        unsafe { self.make_move_unchecked(move_) }
+    }
+
+    /// Makes a move while skipping some of the more expensive validity checks.
+    /// 
+    /// This function does not check if the move is legal.
+    /// 
+    /// This function will still return an error if 
+    /// 1. the move's from location does not contain a piece
+    /// 2. the piece being promoted is not a pawn
+    /// 3. the promotion_kind is to a pawn to king
+    /// as all of these checks are cheap.
+    pub unsafe fn make_move_unchecked(&mut self, move_: SelectedMove) -> Result<(), MoveErr> {
         let promotion_kind = move_.promotion_kind();
         // Can't promote to king or pawn!
         if let Some(PieceKind::King | PieceKind::Pawn) = promotion_kind {
-            return Err(());
+            return Err(MoveErr::IllegalPromotionPieceChoice);
         }
 
         let move_ = move_.move_();
         match self.at(move_.from) {
-            None => Err(()),
+            None => Err(MoveErr::NoPieceAtFromLocation),
             Some(piece_to_move) => {
                 if promotion_kind.is_some() && piece_to_move.kind() != PieceKind::Pawn {
-                    return Err(());
+                    return Err(MoveErr::PromotionTargetNotPawn);
                 }
 
                 let player_to_move = piece_to_move.player();
