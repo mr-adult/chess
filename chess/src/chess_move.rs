@@ -62,6 +62,12 @@ impl SelectedMove {
         }
     }
 
+    pub(super) fn take_move(self) -> Move {
+        match self {
+            Self::Promotion { move_, .. } | Self::Normal { move_ } => move_,
+        }
+    }
+
     pub fn promotion_kind(&self) -> Option<PieceKind> {
         match self {
             Self::Promotion { promotion_kind, .. } => Some(*promotion_kind),

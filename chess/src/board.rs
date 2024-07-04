@@ -43,7 +43,7 @@ pub struct Board {
     pub(crate) kings: [BitBoard; 2],
     /// A bitboard that represents occupied and unoccupied board squares
     pub(crate) mailbox: BitBoard,
-    history: Vec<Move>,
+    history: Vec<UndoableMove>,
     first_player_to_move: Player,
 }
 
@@ -304,7 +304,8 @@ impl Board {
             return false;
         }
 
-        return !self.history.iter().any(|move_| {
+        return !self.history.iter().any(|undoable_move| {
+            let move_ = undoable_move.move_();
             move_.from == Location::new(File::e, Rank::One)
                 || move_.from == Location::new(File::h, Rank::One)
         });
@@ -315,7 +316,8 @@ impl Board {
             return false;
         }
 
-        return !self.history.iter().any(|move_| {
+        return !self.history.iter().any(|undoable_move| {
+            let move_ = undoable_move.move_();
             move_.from == Location::new(File::e, Rank::Eight)
                 || move_.from == Location::new(File::h, Rank::Eight)
         });
@@ -333,7 +335,8 @@ impl Board {
             return false;
         }
 
-        return !self.history.iter().any(|move_| {
+        return !self.history.iter().any(|undoable_move| {
+            let move_ = undoable_move.move_();
             move_.from == Location::new(File::e, Rank::One)
                 || move_.from == Location::new(File::a, Rank::One)
         });
@@ -344,7 +347,8 @@ impl Board {
             return false;
         }
 
-        return !self.history.iter().any(|move_| {
+        return !self.history.iter().any(|undoable_move| {
+            let move_ = undoable_move.move_();
             move_.from == Location::new(File::e, Rank::Eight)
                 || move_.from == Location::new(File::a, Rank::Eight)
         });
@@ -366,6 +370,7 @@ impl Board {
 
     pub(crate) fn en_passant_target_square(&self) -> Option<Location> {
         if let Some(last_move) = self.history.last() {
+            let last_move = last_move.move_();
             if let Some(last_moved) = self.at(&last_move.to) {
                 if let PieceKind::Pawn = last_moved.kind() {
                     // It may not be necessary to check the files, but it is safer.
@@ -482,7 +487,7 @@ impl Board {
     }
 
     /// Makes the selected move.
-    /// 
+    ///
     /// If the move is not valid, returns an Error with the reason it is invalid.
     pub fn make_move(&mut self, move_: SelectedMove) -> Result<(), MoveErr> {
         if !self
@@ -492,27 +497,32 @@ impl Board {
             return Err(MoveErr::IllegalMove);
         }
 
-        unsafe { self.make_move_unchecked(move_) }
+        self.make_move_unchecked(move_)
     }
 
+    const WHITE_PAWN: Piece = Piece::new(Player::White, PieceKind::Pawn);
+    const BLACK_PAWN: Piece = Piece::new(Player::Black, PieceKind::Pawn);
+
     /// Makes a move while skipping some of the more expensive validity checks.
-    /// 
+    ///
     /// This function does not check if the move is legal.
-    /// 
-    /// This function will still return an error if 
+    ///
+    /// This function will still return an error if
     /// 1. the move's from location does not contain a piece
     /// 2. the piece being promoted is not a pawn
     /// 3. the promotion_kind is to a pawn to king
     /// as all of these checks are cheap.
-    pub unsafe fn make_move_unchecked(&mut self, move_: SelectedMove) -> Result<(), MoveErr> {
-        let promotion_kind = move_.promotion_kind();
+    pub fn make_move_unchecked(
+        &mut self,
+        selected_move: SelectedMove,
+    ) -> Result<(), MoveErr> {
+        let promotion_kind = selected_move.promotion_kind();
         // Can't promote to king or pawn!
         if let Some(PieceKind::King | PieceKind::Pawn) = promotion_kind {
             return Err(MoveErr::IllegalPromotionPieceChoice);
         }
 
-        let move_ = move_.move_();
-
+        let move_ = selected_move.move_();
         match self.at(&move_.from) {
             None => Err(MoveErr::NoPieceAtFromLocation),
             Some(piece_to_move) => {
@@ -520,137 +530,346 @@ impl Board {
                     return Err(MoveErr::PromotionTargetNotPawn);
                 }
 
-                let player_to_move = piece_to_move.player();
-                let to = move_.to.as_u64();
-
-                let en_passant_target = self.en_passant_target_square();
-                let capture_to = if en_passant_target.is_some()
-                    && en_passant_target.unwrap() == move_.to
+                let to_rank = move_.to.rank();
+                if piece_to_move.kind() == PieceKind::Pawn
+                    && (to_rank == Rank::One || to_rank == Rank::Eight)
+                    && promotion_kind.is_none()
                 {
-                    let en_passant_target = en_passant_target.unwrap();
-                    let real_pawn_location;
-                    match player_to_move {
-                        Player::Black => {
-                            real_pawn_location = BitBoard::new(en_passant_target.as_u64()).up();
-                        }
-                        Player::White => {
-                            real_pawn_location = BitBoard::new(en_passant_target.as_u64()).down();
-                        }
-                    }
-                    real_pawn_location.0
-                } else {
-                    to
-                };
-
-                if let Some(captured_piece) = self
-                    .at(&Location::try_from(capture_to)
-                        .expect(Location::failed_from_usize_message()))
-                {
-                    let opponent = captured_piece.player().as_index();
-                    match captured_piece.kind() {
-                        PieceKind::Pawn => {
-                            self.pawns[opponent].0 ^= capture_to;
-                        }
-                        PieceKind::Knight => {
-                            self.knights[opponent].0 ^= capture_to;
-                        }
-                        PieceKind::Bishop => {
-                            self.bishops[opponent].0 ^= capture_to;
-                        }
-                        PieceKind::Rook => {
-                            self.rooks[opponent].0 ^= capture_to;
-                        }
-                        PieceKind::Queen => {
-                            self.queens[opponent].0 ^= capture_to;
-                        }
-                        PieceKind::King => {
-                            self.kings[opponent].0 ^= capture_to;
-                        }
-                    }
+                    return Err(MoveErr::MislabeledPromotion);
                 }
 
-                let player = player_to_move.as_index();
-                let from = move_.from.as_u64();
+                let move_kind = self.classify_move(&piece_to_move, selected_move);
 
-                match piece_to_move.kind() {
-                    PieceKind::Pawn => {
-                        self.pawns[player].0 ^= from;
-                        match promotion_kind.unwrap_or(PieceKind::Pawn) {
-                            PieceKind::Pawn => self.pawns[player].0 ^= to,
-                            PieceKind::Knight => self.knights[player].0 ^= to,
-                            PieceKind::Bishop => self.bishops[player].0 ^= to,
-                            PieceKind::Rook => self.rooks[player].0 ^= to,
-                            PieceKind::Queen => self.queens[player].0 ^= to,
-                            PieceKind::King => unreachable!(),
+                match &move_kind {
+                    UndoableMove::EnPassant {
+                        move_,
+                        captured_pawn_location,
+                    } => unsafe {
+                        self.remove_piece_at(
+                            captured_pawn_location,
+                            match piece_to_move.player().other_player() {
+                                Player::White => &Self::WHITE_PAWN,
+                                Player::Black => &Self::BLACK_PAWN,
+                            },
+                        );
+
+                        self.move_piece(move_, &piece_to_move);
+                    },
+                    UndoableMove::Castles { move_, rook_move } => {
+                        let rook = Piece::new(piece_to_move.player(), PieceKind::Rook);
+                        unsafe {
+                            self.move_piece(rook_move, &rook);
+                            self.move_piece(move_, &piece_to_move);
                         }
                     }
-                    PieceKind::Knight => {
-                        self.knights[player].0 ^= from;
-                        self.knights[player].0 ^= to;
-                    }
-                    PieceKind::Bishop => {
-                        self.bishops[player].0 ^= from;
-                        self.bishops[player].0 ^= to;
-                    }
-                    PieceKind::Rook => {
-                        self.rooks[player].0 ^= from;
-                        self.rooks[player].0 ^= to;
-                    }
-                    PieceKind::Queen => {
-                        self.queens[player].0 ^= from;
-                        self.queens[player].0 ^= to;
-                    }
-                    PieceKind::King => {
-                        self.kings[player].0 ^= from;
-                        self.kings[player].0 ^= to;
-
-                        let from_loc =
-                            Location::try_from(from).expect(Location::failed_from_usize_message());
-                        let to_loc =
-                            Location::try_from(to).expect(Location::failed_from_usize_message());
-
-                        let castle_rank = match player {
-                            white!() => Rank::One,
-                            black!() => Rank::Eight,
-                            _ => unreachable!(),
-                        };
-
-                        if (from_loc.file().as_int() - to_loc.file().as_int()).abs() == 2 {
-                            if to_loc.file() == File::c {
-                                self.rooks[player].0 ^=
-                                    Location::new(File::a, castle_rank).as_u64();
-                                self.rooks[player].0 ^=
-                                    Location::new(File::d, castle_rank).as_u64();
-                            } else if to_loc.file() == File::g {
-                                self.rooks[player].0 ^=
-                                    Location::new(File::h, castle_rank).as_u64();
-                                self.rooks[player].0 ^=
-                                    Location::new(File::f, castle_rank).as_u64();
-                            } else {
-                                panic!("Cannot castle at file {:?}", to_loc.file());
-                            }
-                        }
-                    }
+                    UndoableMove::Normal { move_ } => unsafe {
+                        self.move_piece(move_, &piece_to_move);
+                    },
+                    UndoableMove::Capture {
+                        move_,
+                        captured_piece,
+                    } => unsafe {
+                        self.remove_piece_at(&move_.to, captured_piece);
+                        self.move_piece(move_, &piece_to_move);
+                    },
+                    UndoableMove::Promotion { move_, promoted_to } => unsafe {
+                        self.remove_piece_at(&move_.from, &piece_to_move);
+                        self.add_piece_at(
+                            &move_.to,
+                            &Piece::new(piece_to_move.player(), *promoted_to),
+                        )
+                    },
+                    UndoableMove::CapturePromotion {
+                        move_,
+                        captured_piece,
+                        promoted_to,
+                    } => unsafe {
+                        self.remove_piece_at(&move_.to, captured_piece);
+                        self.remove_piece_at(&move_.from, &piece_to_move);
+                        self.add_piece_at(
+                            &move_.to,
+                            &Piece::new(piece_to_move.player(), *promoted_to),
+                        );
+                    },
                 }
 
-                self.history.push(move_.clone());
+                println!("{move_kind:?}");
+                self.history.push(move_kind);
                 self.update_mailbox();
                 return Ok(());
             }
         }
     }
 
-    pub fn undo(&mut self) -> Result<(), UndoErr> {
-        if self.history.is_empty() {
-            return Err(UndoErr::NoMoveInHistory);
-        } else {
-            return Ok(());
+    /// This function assumes that the selected_move has already been validated as
+    /// a legal move.
+    fn classify_move(&self, piece_to_move: &Piece, selected_move: SelectedMove) -> UndoableMove {
+        let move_ = selected_move.move_();
+
+        let player_to_move = piece_to_move.player();
+        let to = move_.to.as_u64();
+
+        let en_passant_target = self.en_passant_target_square();
+        if piece_to_move.kind() == PieceKind::Pawn
+            && en_passant_target.is_some()
+            && *en_passant_target.as_ref().unwrap() == move_.to
+        {
+            let en_passant_target = en_passant_target.unwrap();
+            let real_pawn_location;
+            match player_to_move {
+                Player::Black => {
+                    real_pawn_location = BitBoard::new(en_passant_target.as_u64()).up();
+                }
+                Player::White => {
+                    real_pawn_location = BitBoard::new(en_passant_target.as_u64()).down();
+                }
+            }
+
+            return UndoableMove::EnPassant {
+                move_: selected_move.take_move(),
+                captured_pawn_location: Location::try_from(real_pawn_location.0)
+                    .expect(Location::failed_from_usize_message()),
+            };
+        }
+
+        let to_location = Location::try_from(to).expect(Location::failed_from_usize_message());
+        if let Some(captured_piece) = self.at(&to_location) {
+            let to_rank = move_.to.rank();
+            if piece_to_move.kind() == PieceKind::Pawn && (to_rank == Rank::One
+                || to_rank == Rank::Eight)
+            {
+                let promotion_kind = selected_move.promotion_kind();
+                return UndoableMove::CapturePromotion {
+                    move_: selected_move.take_move(),
+                    captured_piece: captured_piece,
+                    promoted_to: promotion_kind
+                        .expect("Promotion to have been validated by this point."),
+                };
+            }
+
+            return UndoableMove::Capture {
+                move_: selected_move.take_move(),
+                captured_piece: captured_piece,
+            };
+        }
+
+        let player = player_to_move.as_index();
+        let from = move_.from.as_u64();
+
+        match piece_to_move.kind() {
+            PieceKind::Pawn => {
+                if let Some(promotion) = selected_move.promotion_kind() {
+                    return UndoableMove::Promotion {
+                        move_: selected_move.take_move(),
+                        promoted_to: promotion,
+                    };
+                }
+            }
+            PieceKind::King => {
+                let from_loc =
+                    Location::try_from(from).expect(Location::failed_from_usize_message());
+                let to_loc = Location::try_from(to).expect(Location::failed_from_usize_message());
+
+                if (from_loc.file().as_int() - to_loc.file().as_int()).abs() == 2 {
+                    let castle_rank = match player {
+                        white!() => Rank::One,
+                        black!() => Rank::Eight,
+                        _ => unreachable!(),
+                    };
+
+                    debug_assert!(castle_rank == to_loc.rank() && castle_rank == from_loc.rank());
+
+                    if to_loc.file() == File::c {
+                        return UndoableMove::Castles {
+                            move_: selected_move.take_move(),
+                            rook_move: Move {
+                                from: Location::new(File::a, castle_rank),
+                                to: Location::new(File::d, castle_rank),
+                            },
+                        };
+                    } else if to_loc.file() == File::g {
+                        return UndoableMove::Castles {
+                            move_: selected_move.take_move(),
+                            rook_move: Move {
+                                from: Location::new(File::h, castle_rank),
+                                to: Location::new(File::f, castle_rank),
+                            },
+                        };
+                    } else {
+                        panic!("Cannot castle at file {:?}", to_loc.file());
+                    }
+                }
+            }
+            PieceKind::Bishop | PieceKind::Knight | PieceKind::Rook | PieceKind::Queen => {}
+        }
+
+        return UndoableMove::Normal {
+            move_: selected_move.take_move(),
+        };
+    }
+
+    unsafe fn move_piece(&mut self, move_: &Move, piece: &Piece) {
+        // FUTURE: optimize this by taking advantage of the piece being
+        // the same for both operations
+        unsafe { self.remove_piece_at(&move_.from, piece) };
+        unsafe { self.add_piece_at(&move_.to, piece) };
+    }
+
+    unsafe fn move_piece_rev(&mut self, move_: &Move, piece: &Piece) {
+        // FUTURE: optimize this by taking advantage of the piece being
+        // the same for both operations
+        unsafe { self.remove_piece_at(&move_.to, piece) };
+        unsafe { self.add_piece_at(&move_.from, piece) };
+    }
+
+    unsafe fn remove_piece_at(&mut self, location: &Location, piece: &Piece) {
+        self.xor_piece_at(location, piece)
+    }
+
+    unsafe fn add_piece_at(&mut self, location: &Location, piece: &Piece) {
+        self.xor_piece_at(location, piece)
+    }
+
+    unsafe fn xor_piece_at(&mut self, location: &Location, piece: &Piece) {
+        let player = piece.player().as_index();
+        let location = location.as_u64();
+        match piece.kind() {
+            PieceKind::Pawn => self.pawns[player].0 ^= location,
+            PieceKind::Knight => self.knights[player].0 ^= location,
+            PieceKind::Bishop => self.bishops[player].0 ^= location,
+            PieceKind::Rook => self.rooks[player].0 ^= location,
+            PieceKind::Queen => self.queens[player].0 ^= location,
+            PieceKind::King => self.kings[player].0 ^= location,
+        }
+    }
+
+    /// Undoes the last move. This operation will fail if the
+    /// undo stack is empty.
+    pub fn undo(&mut self) -> Result<UndoableMove, ()> {
+        match self.history.pop() {
+            None => Err(()),
+            Some(last_move) => {
+                let player_to_undo = self.get_player_to_move();
+                let piece_to_undo = self.at(&last_move.move_().to).expect(
+                    "BOARD INTEGRITY: no piece found at 'to' location of move on top of undo stack",
+                );
+                assert!(player_to_undo == piece_to_undo.player(), "BOARD INTEGRITY: player to move and piece that is on top of undo stack mismatch");
+
+                match &last_move {
+                    UndoableMove::EnPassant {
+                        move_,
+                        captured_pawn_location,
+                    } => unsafe {
+                        self.move_piece_rev(move_, &piece_to_undo);
+
+                        self.add_piece_at(
+                            captured_pawn_location,
+                            match player_to_undo.other_player() {
+                                Player::White => &Self::WHITE_PAWN,
+                                Player::Black => &Self::BLACK_PAWN,
+                            },
+                        );
+                    },
+                    UndoableMove::Castles { move_, rook_move } => {
+                        let rook = Piece::new(piece_to_undo.player(), PieceKind::Rook);
+                        unsafe {
+                            self.move_piece_rev(move_, &piece_to_undo);
+                            self.move_piece_rev(rook_move, &rook);
+                        }
+                    }
+                    UndoableMove::Normal { move_ } => unsafe {
+                        self.move_piece_rev(move_, &piece_to_undo);
+                    },
+                    UndoableMove::Capture {
+                        move_,
+                        captured_piece,
+                    } => unsafe {
+                        self.move_piece_rev(move_, &piece_to_undo);
+                        self.add_piece_at(&move_.to, captured_piece);
+                    },
+                    UndoableMove::Promotion { move_, promoted_to } => {
+                        assert!(*promoted_to == piece_to_undo.kind());
+
+                        unsafe {
+                            self.remove_piece_at(&move_.to, &piece_to_undo);
+                            self.add_piece_at(
+                                &move_.from,
+                                &Piece::new(player_to_undo, PieceKind::Pawn),
+                            )
+                        }
+                    }
+                    UndoableMove::CapturePromotion {
+                        move_,
+                        captured_piece,
+                        promoted_to,
+                    } => unsafe {
+                        assert!(*promoted_to == piece_to_undo.kind());
+
+                        self.remove_piece_at(&move_.to, &piece_to_undo);
+                        self.add_piece_at(&move_.to, captured_piece);
+                        self.add_piece_at(&move_.from, &Piece::new(player_to_undo, PieceKind::Pawn));
+                    },
+                }
+
+                self.update_mailbox();
+                Ok(last_move)
+            }
         }
     }
 }
 
-pub enum UndoErr {
-    NoMoveInHistory,
+#[derive(Debug)]
+pub enum MoveErr {
+    IllegalMove,
+    NoPieceAtFromLocation,
+    IllegalPromotionPieceChoice,
+    PromotionTargetNotPawn,
+    MislabeledPromotion,
+}
+
+#[derive(Debug)]
+pub enum UndoableMove {
+    Promotion {
+        move_: Move,
+        // algebraic_notation: String,
+        promoted_to: PieceKind,
+    },
+    EnPassant {
+        move_: Move,
+        // algebraic_notation: String,
+        captured_pawn_location: Location,
+    },
+    Normal {
+        move_: Move,
+        // algebraic_notation: String,
+    },
+    Capture {
+        move_: Move,
+        // algebraic_notation: String,
+        captured_piece: Piece,
+    },
+    CapturePromotion {
+        move_: Move,
+        captured_piece: Piece,
+        promoted_to: PieceKind,
+    },
+    Castles {
+        move_: Move,
+        rook_move: Move,
+    },
+}
+
+impl UndoableMove {
+    pub fn move_(&self) -> &Move {
+        match self {
+            Self::Promotion { move_, .. } => move_,
+            Self::EnPassant { move_, .. } => move_,
+            Self::Normal { move_, .. } => move_,
+            Self::Capture { move_, .. } => move_,
+            Self::CapturePromotion { move_, .. } => move_,
+            Self::Castles { move_, .. } => move_,
+        }
+    }
 }
 
 impl Default for Board {
