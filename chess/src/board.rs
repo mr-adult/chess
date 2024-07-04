@@ -150,7 +150,7 @@ impl ToString for Board {
 
             let mut empty_spaces = 0;
             for file in File::all_files_ascending() {
-                match self.at(Location::new(file, rank)) {
+                match self.at(&Location::new(file, rank)) {
                     None => empty_spaces += 1,
                     Some(piece) => {
                         if empty_spaces > 0 {
@@ -366,7 +366,7 @@ impl Board {
 
     pub(crate) fn en_passant_target_square(&self) -> Option<Location> {
         if let Some(last_move) = self.history.last() {
-            if let Some(last_moved) = self.at(last_move.to) {
+            if let Some(last_moved) = self.at(&last_move.to) {
                 if let PieceKind::Pawn = last_moved.kind() {
                     // It may not be necessary to check the files, but it is safer.
                     if last_move.to.file() == last_move.from.file()
@@ -391,7 +391,7 @@ impl Board {
         return None;
     }
 
-    fn at(&self, location: Location) -> Option<Piece> {
+    fn at(&self, location: &Location) -> Option<Piece> {
         let location_bits = location.as_u64();
 
         if location_bits == 0 {
@@ -466,7 +466,7 @@ impl Board {
         for rank in Rank::all_ranks_ascending() {
             for file in File::all_files_ascending() {
                 let location = Location::new(file, rank);
-                result[location] = self.at(location);
+                result[location] = self.at(&location);
             }
         }
 
@@ -512,7 +512,8 @@ impl Board {
         }
 
         let move_ = move_.move_();
-        match self.at(move_.from) {
+
+        match self.at(&move_.from) {
             None => Err(MoveErr::NoPieceAtFromLocation),
             Some(piece_to_move) => {
                 if promotion_kind.is_some() && piece_to_move.kind() != PieceKind::Pawn {
@@ -542,7 +543,7 @@ impl Board {
                 };
 
                 if let Some(captured_piece) = self
-                    .at(Location::try_from(capture_to)
+                    .at(&Location::try_from(capture_to)
                         .expect(Location::failed_from_usize_message()))
                 {
                     let opponent = captured_piece.player().as_index();
