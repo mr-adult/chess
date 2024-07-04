@@ -324,6 +324,24 @@ impl<T, const N: usize> IntoIterator for ArrDeque<T, N> {
     }
 }
 
+impl<'a, T, const N: usize> IntoIterator for &'a mut ArrDeque<T, N> {
+    type IntoIter = IterMut<'a, T, N>;
+    type Item = &'a mut T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+impl<'a, T, const N: usize> IntoIterator for &'a ArrDeque<T, N> {
+    type IntoIter = Iter<'a, T, N>;
+    type Item = &'a T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 #[derive(Debug)]
 pub struct IntoIter<T, const N: usize> {
     deque: ArrDeque<T, N>,
