@@ -117,7 +117,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         {
             self.check_blocking_squares = Some(
                 CheckStoppingSquaresIterator::new(
-                    &self.board,
+                    self.board,
                     self.player,
                     self.board.kings[self.player.as_index()].0,
                 )

@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chess_core::{Board, Move, PossibleMove, SelectedMove};
+use chess_core::{Board, PossibleMove, SelectedMove};
 use http::StatusCode;
 use serde::Deserialize;
 
