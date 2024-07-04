@@ -73,12 +73,10 @@ impl<T, const N: usize> ArrDeque<T, N> {
         }
     }
 
-    #[allow(unused)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    #[allow(unused)]
     pub fn is_full(&self) -> bool {
         self.len() == self.items.len()
     }
@@ -139,9 +137,8 @@ impl<T, const N: usize> ArrDeque<T, N> {
         return Ok(());
     }
 
-    #[allow(unused)]
     pub fn pop_back(&mut self) -> Option<T> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return None;
         }
 
@@ -155,9 +152,8 @@ impl<T, const N: usize> ArrDeque<T, N> {
         return Some(value);
     }
 
-    #[allow(unused)]
     pub fn peek_back(&self) -> Option<&T> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return None;
         }
         let maybe_uninit = &self.items[self.back];
@@ -185,7 +181,6 @@ impl<T, const N: usize> ArrDeque<T, N> {
         }
     }
 
-    #[allow(unused)]
     pub fn iter_mut(&mut self) -> IterMut<'_, T, N> {
         let indexes = self.active_indexes();
         IterMut {
@@ -400,7 +395,7 @@ impl<T, const N: usize> Debug for ArrDeque<T, N>
     where T: Debug {
     
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.len() == 0 {
+        if self.is_empty() {
             return write!(f, "[]");
         }
 
