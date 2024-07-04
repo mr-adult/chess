@@ -115,11 +115,12 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .map(|loc| loc.as_u64())
                     .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
 
-                if !any_pieces_in_way {
+                let to_loc = Location::new(File::c, castle_rank);
+                if !any_pieces_in_way && !self.is_check(self.player, to_loc.as_u64()) {
                     return Some(Move {
                         from: Location::try_from(self.king_bitboard.0)
                             .expect(Location::failed_from_usize_message()),
-                        to: Location::new(File::c, castle_rank),
+                        to: to_loc,
                     });
                 }
             }
@@ -135,11 +136,13 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .map(|loc| loc.as_u64())
                     .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
 
-                if !any_pieces_in_way {
+                let to_loc =Location::new(File::g, castle_rank); 
+
+                if !any_pieces_in_way && !self.is_check(self.player, to_loc.as_u64()) {
                     return Some(Move {
                         from: Location::try_from(self.king_bitboard.0)
                             .expect(Location::failed_from_usize_message()),
-                        to: Location::new(File::g, castle_rank),
+                        to: to_loc,
                     });
                 }
             }
