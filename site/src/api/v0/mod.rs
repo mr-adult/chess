@@ -21,7 +21,6 @@ pub(crate) fn create_api_router() -> Router {
 async fn get_legal_moves_handler(
     req: Query<FenRequest>,
 ) -> Result<Json<Vec<PossibleMove>>, StatusCode> {
-    println!("{}", req.0.board_fen);
     let board = Board::from_str(&req.board_fen).map_err(|_| StatusCode::BAD_REQUEST)?;
     Ok(Json(board.legal_moves().collect::<Vec<_>>()))
 }
