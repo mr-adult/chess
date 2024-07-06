@@ -10,7 +10,8 @@ mod queen;
 pub(crate) mod rook;
 
 use bishop::LegalBishopMovesIterator;
-use king::{CheckStoppingSquaresIterator, KingProtectingLocationsIterator, LegalKingMovesIterator};
+pub(crate) use king::LegalKingMovesIterator;
+use king::{CheckStoppingSquaresIterator, KingProtectingLocationsIterator};
 use knight::LegalKnightMovesIterator;
 use pawn::LegalPawnMovesIterator;
 use queen::LegalQueenMovesIterator;
@@ -111,9 +112,11 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         if self.check_blocking_squares.is_none()
-            && self
-                .king_moves_iterator
-                .is_check(self.player, self.board.kings[self.player.as_index()].0)
+            && LegalKingMovesIterator::is_check(
+                self.board,
+                self.player,
+                self.board.kings[self.player.as_index()].0,
+            )
         {
             self.check_blocking_squares = Some(
                 CheckStoppingSquaresIterator::new(

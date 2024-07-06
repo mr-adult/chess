@@ -5,4 +5,4 @@ mod legal_moves;
 
 pub(super) use check_blocking_squares::CheckStoppingSquaresIterator;
 pub(super) use king_protecting_pieces::KingProtectingLocationsIterator;
-pub(super) use legal_moves::LegalKingMovesIterator;
+pub(crate) use legal_moves::LegalKingMovesIterator;

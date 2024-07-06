@@ -6,11 +6,17 @@ use std::{
 };
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
-use chess_parsers::{parse_fen, BoardLayout, FenErr};
+use chess_parsers::{
+    parse_algebraic_notation, parse_fen, BoardLayout, Check, FenErr, NormalMove, PieceMove,
+    PieceMoveKind,
+};
 
 use crate::{
-    bitboard::BitBoard, chess_move::SelectedMove, legal_moves::LegalMovesIterator,
-    possible_moves::PossibleMovesIterator, Move,
+    bitboard::BitBoard,
+    chess_move::SelectedMove,
+    legal_moves::{LegalKingMovesIterator, LegalMovesIterator},
+    possible_moves::PossibleMovesIterator,
+    Move,
 };
 
 #[derive(Debug)]
@@ -51,6 +57,12 @@ impl FromStr for Board {
     type Err = FenErr;
     fn from_str(str: &str) -> Result<Self, Self::Err> {
         let layout = parse_fen(str)?;
+        Ok(Self::from(layout))
+    }
+}
+
+impl From<BoardLayout> for Board {
+    fn from(layout: BoardLayout) -> Self {
         let player_to_move = layout.player_to_move();
 
         let mut result = Self {
@@ -133,7 +145,7 @@ impl FromStr for Board {
         }
 
         result.update_mailbox();
-        Ok(result)
+        result
     }
 }
 
@@ -211,6 +223,10 @@ impl ToString for Board {
 }
 
 impl Board {
+    pub fn starting_position(&self) -> &BoardLayout {
+        &self.starting_position
+    }
+
     fn update_mailbox(&mut self) {
         // first, clear it
         self.mailbox.0 &= 0_u64;
@@ -396,6 +412,20 @@ impl Board {
         return None;
     }
 
+    fn is_check(&self) -> bool {
+        let player_to_move = self.get_player_to_move();
+        let king_position = self.kings[player_to_move.as_index()].0;
+        LegalKingMovesIterator::is_check(self, player_to_move, king_position)
+    }
+
+    fn is_check_mate(&self) -> bool {
+        self.legal_moves().next().is_none() && self.is_check()
+    }
+
+    fn is_stale_mate(&self) -> bool {
+        self.legal_moves().next().is_none() && !self.is_check()
+    }
+
     fn at(&self, location: &Location) -> Option<Piece> {
         let location_bits = location.as_u64();
 
@@ -478,12 +508,273 @@ impl Board {
         result
     }
 
+    /// Gets the list of historical moves in algebraic chess
+    /// notation.
+    pub fn get_move_history_acn(&self) -> Vec<PieceMove> {
+        if self.history.is_empty() {
+            return Vec::with_capacity(0);
+        }
+
+        // Clone the board so we can replay the moves
+        let mut temp_board = Self::from(self.starting_position.clone());
+        let mut result = Vec::with_capacity(self.history.len());
+
+        for undoable_move in self.history.iter() {
+            let expect_piece_at = |loc: &Location| {
+                temp_board.at(loc).unwrap_or_else(|| {
+                    panic!(
+                        "BOARD INTEGRITY: board history does not align with board state. {self:?}"
+                    )
+                })
+            };
+
+            let map_standard_move = |move_: &Move, is_capture: bool| {
+                let moving_piece = expect_piece_at(&move_.from);
+
+                let mut disambiguation_file = None;
+                let mut disambiguation_rank = None;
+
+                let conflicts = temp_board
+                    .legal_moves()
+                    .filter(|possible_move| {
+                        let inner_move = possible_move.move_();
+                        inner_move.to == move_.to && inner_move.from != move_.from
+                    })
+                    .filter(|potential_conflict| {
+                        let conflict_piece = expect_piece_at(&potential_conflict.move_().from);
+                        moving_piece == conflict_piece
+                    })
+                    .map(|possible_move| possible_move.take_move())
+                    .collect::<Vec<_>>();
+
+                if is_capture && moving_piece.kind() == PieceKind::Pawn {
+                    disambiguation_file = Some(move_.from.file());
+                }
+
+                if !conflicts.is_empty() {
+                    let move_from_file = move_.from.file();
+                    let move_from_rank = move_.from.rank();
+
+                    // if file is enough to disambiguate, just use that.
+                    if !conflicts
+                        .iter()
+                        .any(|conflict| conflict.from.file() == move_.from.file())
+                    {
+                        disambiguation_file = Some(move_from_file);
+                        // if rank is enough to disambiguate, just use that.
+                    } else if !conflicts
+                        .iter()
+                        .any(|conflict| conflict.from.rank() == move_.from.rank())
+                    {
+                        disambiguation_rank = Some(move_from_rank);
+                        // neither file nor rank is enough to disambiguate, so use both.
+                    } else {
+                        disambiguation_file = Some(move_from_file);
+                        disambiguation_rank = Some(move_from_rank);
+                    }
+                }
+
+                PieceMoveKind::Normal(NormalMove {
+                    piece_kind: moving_piece.kind(),
+                    destination: move_.to,
+                    disambiguation_file,
+                    disambiguation_rank,
+                    is_capture,
+                    promotion_kind: None,
+                    move_suffix_annotations: Default::default(),
+                })
+            };
+
+            let piece_move_kind = match &undoable_move {
+                UndoableMove::EnPassant { move_, .. } | UndoableMove::Capture { move_, .. } => map_standard_move(move_, true),
+                UndoableMove::Normal { move_ } => map_standard_move(move_, false),
+                UndoableMove::Castles { move_, .. } => {
+                    match move_.to.file() {
+                        File::c => {
+                            PieceMoveKind::CastleQueenside
+                        },
+                        File::g => {
+                            PieceMoveKind::CastleKingside
+                        },
+                        _ => panic!("BOARD INTEGRITY: A move claimed to be a castles to a file other than c or g. {undoable_move:?}"),
+                    }
+                }
+                UndoableMove::Promotion { move_, promoted_to } => {
+                    PieceMoveKind::Normal(NormalMove {
+                        piece_kind: PieceKind::Pawn,
+                        destination: move_.to,
+                        disambiguation_file: None,
+                        disambiguation_rank: None,
+                        is_capture: false,
+                        promotion_kind: Some(*promoted_to),
+                        move_suffix_annotations: Default::default(),
+                    })
+                }
+                UndoableMove::CapturePromotion { move_, promoted_to, .. } => {
+                    let to_file = move_.to.file().as_int();
+                    let from_file = move_.from.file().as_int();
+
+                    let mut disambiguation_file = None;
+                    if let Ok(potential_disambiguation_file) = File::try_from(from_file - ((to_file - from_file) << 1 /* faster multiply by 2 */)) {
+                        if temp_board.pawns[temp_board.get_player_to_move().as_index()].intersects_with_u64(Location::new(potential_disambiguation_file, move_.from.rank()).as_u64()) {
+                            disambiguation_file = Some(potential_disambiguation_file);
+                        }
+                    }
+
+                    PieceMoveKind::Normal(NormalMove {
+                        piece_kind: PieceKind::Pawn,
+                        destination: move_.to,
+                        disambiguation_file: disambiguation_file,
+                        disambiguation_rank: None, // rank is never ambiguous in a promotion
+                        is_capture: true,
+                        promotion_kind: Some(*promoted_to),
+                        move_suffix_annotations: Default::default(),
+                    })
+                }
+            };
+
+            temp_board
+                .make_move(undoable_move.into())
+                .expect("BOARD INTEGRITY: a move from the history could not be replayed.");
+
+            let check_status = if temp_board.is_check() {
+                if temp_board.is_check_mate() {
+                    Check::Mate
+                } else {
+                    Check::Check
+                }
+            } else {
+                Check::None
+            };
+
+            result.push(PieceMove {
+                check_kind: check_status,
+                move_kind: piece_move_kind,
+            });
+        }
+
+        result
+    }
+
     pub fn legal_moves<'board>(&'board self) -> LegalMovesIterator<'board> {
         LegalMovesIterator::for_board(self)
     }
 
     pub fn possible_moves<'board>(&'board self) -> PossibleMovesIterator<'board> {
         PossibleMovesIterator::new(self.legal_moves())
+    }
+
+    /// Makes a move where the move is passed in in algebraic chess notation
+    pub fn make_move_acn(&mut self, acn: &str) -> Result<(), AcnMoveErr> {
+        if let Some(move_) = parse_algebraic_notation(acn.trim()) {
+            let player_to_move = self.get_player_to_move();
+            let selected_move = match move_.move_kind {
+                PieceMoveKind::CastleKingside => {
+                    // No need to validate its legality. make_move() will do that.
+                    SelectedMove::Normal {
+                        move_: match player_to_move {
+                            Player::White => Move::WHITE_CASTLE_KINGSIDE,
+                            Player::Black => Move::BLACK_CASTLE_KINGSIDE,
+                        },
+                    }
+                }
+                PieceMoveKind::CastleQueenside => {
+                    // No need to validate its legality. make_move() will do that.
+                    SelectedMove::Normal {
+                        move_: match player_to_move {
+                            Player::White => Move::WHITE_CASTLE_QUEENSIDE,
+                            Player::Black => Move::BLACK_CASTLE_QUEENSIDE,
+                        },
+                    }
+                }
+                PieceMoveKind::Normal(normal_move_data) => {
+                    let mut candidates = Vec::new();
+                    for legal_move in self.legal_moves() {
+                        let candidate_move = legal_move.move_();
+                        if candidate_move.to != normal_move_data.destination {
+                            continue;
+                        }
+
+                        if let Some(rank) = normal_move_data.disambiguation_rank {
+                            if rank != candidate_move.from.rank() {
+                                continue;
+                            }
+                        }
+
+                        if let Some(file) = normal_move_data.disambiguation_file {
+                            if file != candidate_move.from.file() {
+                                continue;
+                            }
+                        }
+
+                        let piece = self.at(&candidate_move.from).expect(
+                            "BOARD INTEGRITY: mismatch between make_move and legal_moves logic",
+                        );
+
+                        if piece.player() != player_to_move
+                            || normal_move_data.piece_kind != piece.kind()
+                        {
+                            continue;
+                        }
+
+                        candidates.push(legal_move);
+                    }
+
+                    if candidates.is_empty() {
+                        return Err(AcnMoveErr::Move(MoveErr::IllegalMove));
+                    }
+
+                    if candidates.len() > 1 {
+                        return Err(AcnMoveErr::AmbiguousMove);
+                    }
+
+                    let move_ = candidates.into_iter().next().unwrap();
+                    match normal_move_data.promotion_kind {
+                        None => SelectedMove::Normal {
+                            move_: move_.move_().clone(),
+                        },
+                        Some(promotion_kind) => SelectedMove::Promotion {
+                            move_: move_.move_().clone(),
+                            promotion_kind,
+                        },
+                    }
+                }
+            };
+
+            self.make_move(selected_move)?;
+
+            match move_.check_kind {
+                Check::Mate => {
+                    if self.is_check_mate() {
+                        return Ok(());
+                    } else {
+                        self.undo().expect("a move to be on the undo stack");
+                        return Err(AcnMoveErr::CheckStateMismatch);
+                    }
+                }
+                Check::Check => {
+                    if self.is_check_mate() {
+                        self.undo().expect("a move to be on the undo stack");
+                        return Err(AcnMoveErr::CheckStateMismatch);
+                    } else if self.is_check() {
+                        return Ok(());
+                    } else {
+                        self.undo().expect("a move to be on the undo stack");
+                        return Err(AcnMoveErr::CheckStateMismatch);
+                    }
+                }
+                Check::None => {
+                    if self.is_check() {
+                        self.undo().expect("a move to be on the undo stack");
+                        return Err(AcnMoveErr::CheckStateMismatch);
+                    } else {
+                        return Ok(());
+                    }
+                }
+            }
+        } else {
+            return Err(AcnMoveErr::Acn);
+        }
     }
 
     /// Makes the selected move.
@@ -512,10 +803,7 @@ impl Board {
     /// 2. the piece being promoted is not a pawn
     /// 3. the promotion_kind is to a pawn to king
     /// as all of these checks are cheap.
-    pub fn make_move_unchecked(
-        &mut self,
-        selected_move: SelectedMove,
-    ) -> Result<(), MoveErr> {
+    pub fn make_move_unchecked(&mut self, selected_move: SelectedMove) -> Result<(), MoveErr> {
         let promotion_kind = selected_move.promotion_kind();
         // Can't promote to king or pawn!
         if let Some(PieceKind::King | PieceKind::Pawn) = promotion_kind {
@@ -635,8 +923,8 @@ impl Board {
         let to_location = Location::try_from(to).expect(Location::failed_from_usize_message());
         if let Some(captured_piece) = self.at(&to_location) {
             let to_rank = move_.to.rank();
-            if piece_to_move.kind() == PieceKind::Pawn && (to_rank == Rank::One
-                || to_rank == Rank::Eight)
+            if piece_to_move.kind() == PieceKind::Pawn
+                && (to_rank == Rank::One || to_rank == Rank::Eight)
             {
                 let promotion_kind = selected_move.promotion_kind();
                 return UndoableMove::CapturePromotion {
@@ -671,12 +959,8 @@ impl Board {
                 let to_loc = Location::try_from(to).expect(Location::failed_from_usize_message());
 
                 if (from_loc.file().as_int() - to_loc.file().as_int()).abs() == 2 {
-                    let castle_rank = match player {
-                        white!() => Rank::One,
-                        black!() => Rank::Eight,
-                        _ => unreachable!(),
-                    };
-
+                    let castle_rank =
+                        Rank::castle(&Player::try_from(player).expect("player to be valid"));
                     debug_assert!(castle_rank == to_loc.rank() && castle_rank == from_loc.rank());
 
                     if to_loc.file() == File::c {
@@ -814,7 +1098,10 @@ impl Board {
 
                         self.remove_piece_at(&move_.to, &piece_to_undo);
                         self.add_piece_at(&move_.to, captured_piece);
-                        self.add_piece_at(&move_.from, &Piece::new(player_to_undo, PieceKind::Pawn));
+                        self.add_piece_at(
+                            &move_.from,
+                            &Piece::new(player_to_undo, PieceKind::Pawn),
+                        );
                     },
                 }
 
@@ -822,6 +1109,23 @@ impl Board {
                 Ok(last_move)
             }
         }
+    }
+}
+
+pub enum AcnMoveErr {
+    /// Signifies an error in parsing the algebraic chess notation string.
+    Acn,
+    /// Signifies that the ACN string's check status mismatched the board state.
+    CheckStateMismatch,
+    /// Signifies that multiple legal moves matched the ACN string.
+    AmbiguousMove,
+    /// Signifies that the move could not be made with the reason.
+    Move(MoveErr),
+}
+
+impl From<MoveErr> for AcnMoveErr {
+    fn from(value: MoveErr) -> Self {
+        Self::Move(value)
     }
 }
 
@@ -875,6 +1179,26 @@ impl UndoableMove {
             Self::Capture { move_, .. } => move_,
             Self::CapturePromotion { move_, .. } => move_,
             Self::Castles { move_, .. } => move_,
+        }
+    }
+}
+
+impl Into<SelectedMove> for &UndoableMove {
+    fn into(self) -> SelectedMove {
+        match self {
+            UndoableMove::Promotion { move_, promoted_to }
+            | UndoableMove::CapturePromotion {
+                move_, promoted_to, ..
+            } => SelectedMove::Promotion {
+                move_: move_.clone(),
+                promotion_kind: *promoted_to,
+            },
+            UndoableMove::EnPassant { move_, .. }
+            | UndoableMove::Normal { move_ }
+            | UndoableMove::Capture { move_, .. }
+            | UndoableMove::Castles { move_, .. } => SelectedMove::Normal {
+                move_: move_.clone(),
+            },
         }
     }
 }

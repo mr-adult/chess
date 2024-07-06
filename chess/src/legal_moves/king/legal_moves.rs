@@ -41,20 +41,19 @@ impl<'board> LegalKingMovesIterator<'board> {
         }
     }
 
-    pub(crate) fn is_check(&self, player: Player, king_position: u64) -> bool {
+    pub(crate) fn is_check(board: &Board, player: Player, king_position: u64) -> bool {
         let player_index = player.as_index();
         let mut iterator = LegalCapturesAtLocationIterator::new_with_mailbox(
-            &self.board,
+            &board,
             player.other_player(),
             king_position,
             // omit the king from the mailbox so we don't allow a move away from the checking piece back into check
-            self.board.pawns[player_index].0
-                | self.board.knights[player_index].0
-                | self.board.bishops[player_index].0
-                | self.board.rooks[player_index].0
-                | self.board.queens[player_index].0
-                | self
-                    .board
+            board.pawns[player_index].0
+                | board.knights[player_index].0
+                | board.bishops[player_index].0
+                | board.rooks[player_index].0
+                | board.queens[player_index].0
+                | board
                     .create_mailbox_for_player(
                         Player::try_from(player_index)
                             .expect("Player to never fail to map")
@@ -83,7 +82,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                 continue;
             }
 
-            if self.is_check(self.player, king_move.0) {
+            if LegalKingMovesIterator::is_check(self.board, self.player, king_move.0) {
                 continue;
             }
 
@@ -94,7 +93,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             });
         }
 
-        if self.is_check(self.player, self.king_bitboard.0)
+        if LegalKingMovesIterator::is_check(self.board, self.player, self.king_bitboard.0)
             || (self.checked_castle_queenside && self.checked_castle_kingside)
         {
             return None;
@@ -116,7 +115,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
 
                 let to_loc = Location::new(File::c, castle_rank);
-                if !any_pieces_in_way && !self.is_check(self.player, to_loc.as_u64()) {
+                if !any_pieces_in_way && !Self::is_check(self.board, self.player, to_loc.as_u64()) {
                     return Some(Move {
                         from: Location::try_from(self.king_bitboard.0)
                             .expect(Location::failed_from_usize_message()),
@@ -136,9 +135,9 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .map(|loc| loc.as_u64())
                     .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
 
-                let to_loc =Location::new(File::g, castle_rank); 
+                let to_loc = Location::new(File::g, castle_rank);
 
-                if !any_pieces_in_way && !self.is_check(self.player, to_loc.as_u64()) {
+                if !any_pieces_in_way && !Self::is_check(self.board, self.player, to_loc.as_u64()) {
                     return Some(Move {
                         from: Location::try_from(self.king_bitboard.0)
                             .expect(Location::failed_from_usize_message()),
