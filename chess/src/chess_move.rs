@@ -1,12 +1,46 @@
 use std::fmt::Debug;
 
-use chess_common::{Location, PieceKind};
+use chess_common::{File, Location, PieceKind, Player, Rank};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Move {
     pub(crate) from: Location,
     pub(crate) to: Location,
+}
+
+impl Move {
+    pub const WHITE_CASTLE_KINGSIDE: Move = Move {
+        from: Location::new(File::king_starting(), Rank::castle(&Player::White)),
+        to: Location::new(
+            File::castle_kingside_destination(),
+            Rank::castle(&Player::White),
+        ),
+    };
+
+    pub const BLACK_CASTLE_KINGSIDE: Move = Move {
+        from: Location::new(File::king_starting(), Rank::castle(&Player::Black)),
+        to: Location::new(
+            File::castle_kingside_destination(),
+            Rank::castle(&Player::Black),
+        ),
+    };
+
+    pub const WHITE_CASTLE_QUEENSIDE: Move = Move {
+        from: Location::new(File::king_starting(), Rank::castle(&Player::White)),
+        to: Location::new(
+            File::castle_queenside_destination(),
+            Rank::castle(&Player::White),
+        ),
+    };
+
+    pub const BLACK_CASTLE_QUEENSIDE: Move = Move {
+        from: Location::new(File::king_starting(), Rank::castle(&Player::Black)),
+        to: Location::new(
+            File::castle_queenside_destination(),
+            Rank::castle(&Player::Black),
+        ),
+    };
 }
 
 impl Debug for Move {
@@ -35,6 +69,12 @@ pub enum PossibleMove {
 
 impl PossibleMove {
     pub fn move_(&self) -> &Move {
+        match self {
+            Self::Promotion { move_ } | Self::Normal { move_ } => move_,
+        }
+    }
+
+    pub fn take_move(self) -> Move {
         match self {
             Self::Promotion { move_ } | Self::Normal { move_ } => move_,
         }
