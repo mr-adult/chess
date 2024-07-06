@@ -1,5 +1,9 @@
 use std::{
-    array::from_fn, fmt::Debug, mem::MaybeUninit, ops::{Index, IndexMut}, usize
+    array::from_fn,
+    fmt::Debug,
+    mem::MaybeUninit,
+    ops::{Index, IndexMut},
+    usize,
 };
 
 pub struct ArrDeque<T, const N: usize> {
@@ -391,9 +395,10 @@ impl<'deque, T, const N: usize> Iterator for Iter<'deque, T, N> {
     }
 }
 
-impl<T, const N: usize> Debug for ArrDeque<T, N> 
-    where T: Debug {
-    
+impl<T, const N: usize> Debug for ArrDeque<T, N>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_empty() {
             return write!(f, "[]");
