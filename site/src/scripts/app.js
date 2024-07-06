@@ -115,7 +115,6 @@ function onDrop(e) {
 
     if (!is_legal_move) { return; }
 
-    var type = "Normal";
     if (is_promotion) {
         var selected_promotion = "";
         while (!selected_promotion || 
@@ -137,8 +136,19 @@ function onDrop(e) {
             selected_promotion = dirty.trim()[0].toLocaleLowerCase();
         }
     }
+
+    var starting_fen = document.querySelector("#initial_board_fen").textContent;
+    var history_elements = document.querySelectorAll("td[move]");
+    var history = [];
+    for (var i = 0; i < history_elements.length; i++) {
+        var move_number = parseInt(history_elements[i].getAttribute("move"));
+        if (isNaN(move_number)) { throw new Error("NaN"); }
+        history[move_number - 1] = history_elements[i].textContent
+    }
     
     var payload = {
+        starting_fen: starting_fen,
+        history: history,
         board_fen: board_fen,
         move: {
             type: is_promotion ? "Promotion" : "Normal",
