@@ -250,7 +250,7 @@ impl<'pgn> PgnParser<'pgn> {
                     _ => {}
                 }
 
-                match parse_algebraic_notation(&symbol) {
+                match parse_algebraic_notation(&symbol.trim()) {
                     None => Err(PgnErr::InvalidAlgebraicChessNotation(symbol))?,
                     Some(move_spec) => {
                         moves.push(move_spec);

@@ -113,8 +113,8 @@ impl ToString for NormalMove {
     }
 }
 
-#[derive(Debug)]
-enum SuffixAnnotation {
+#[derive(Clone, Copy, Debug)]
+pub enum SuffixAnnotation {
     Exclamation,
     Question,
 }
@@ -132,9 +132,33 @@ impl ACNParser {
     /// because it doesn't check the integrity of the string
     /// contents.
     fn parse(source: &str) -> Option<PieceMove> {
-        let trimmed = source.trim();
-        if trimmed.starts_with("O-O") {
-            match trimmed.len() {
+        if source.starts_with("O-O-O") {
+            match source.len() {
+                5 => {
+                    return Some(PieceMove {
+                        check_kind: Check::None,
+                        move_kind: PieceMoveKind::CastleQueenside,
+                    })
+                }
+                6 => {
+                    let last_char = source.as_bytes()[3];
+                    let check_kind = match last_char {
+                        b'+' => Check::Check,
+                        b'#' => Check::Mate,
+                        _ => return None,
+                    };
+
+                    return Some(PieceMove {
+                        check_kind,
+                        move_kind: PieceMoveKind::CastleQueenside,
+                    });
+                }
+                _ => return None,
+            }
+        }
+
+        if source.starts_with("O-O") {
+            match source.len() {
                 3 => {
                     return Some(PieceMove {
                         check_kind: Check::None,
@@ -142,7 +166,7 @@ impl ACNParser {
                     })
                 }
                 4 => {
-                    let last_char = trimmed.as_bytes()[3];
+                    let last_char = source.as_bytes()[3];
                     let check_kind = match last_char {
                         b'+' => Check::Check,
                         b'#' => Check::Mate,
@@ -151,68 +175,43 @@ impl ACNParser {
 
                     return Some(PieceMove {
                         check_kind,
-                       move_kind: PieceMoveKind::CastleKingside,
+                        move_kind: PieceMoveKind::CastleKingside,
                     });
                 }
                 _ => return None,
             }
         }
 
-        if trimmed.starts_with("O-O-O") {
-            match trimmed.len() {
-                3 => {
-                    return Some(PieceMove {
-                        check_kind: Check::None,
-                       move_kind: PieceMoveKind::CastleQueenside,
-                    })
-                }
-                4 => {
-                    let last_char = trimmed.as_bytes()[3];
-                    let check_kind = match last_char {
-                        b'+' => Check::Check,
-                        b'#' => Check::Mate,
-                        _ => return None,
-                    };
-
-                    return Some(PieceMove {
-                        check_kind,
-                       move_kind: PieceMoveKind::CastleQueenside,
-                    });
-                }
-                _ => return None,
-            }
-        }
-
-        let mut chars = trimmed.chars().peekable();
+        let mut chars = source.chars().peekable();
         let piece_kind = match chars.peek()? {
             'P' => {
                 // consume it!
-                chars.next();
+                chars.next()?;
                 PieceKind::Pawn
             }
             'N' => {
                 // consume it!
-                chars.next();
+                chars.next()?;
                 PieceKind::Knight
             }
             'B' => {
                 // consume it!
-                chars.next();
+                chars.next()?;
                 PieceKind::Bishop
             }
             'R' => {
                 // consume it!
-                chars.next();
+                chars.next()?;
                 PieceKind::Rook
             }
             'Q' => {
                 // consume it!
-                chars.next();
+                chars.next()?;
                 PieceKind::Queen
             }
             'K' => {
                 // consume it!
-                chars.next();
+                chars.next()?;
                 PieceKind::King
             }
             _ => PieceKind::Pawn,
@@ -234,7 +233,7 @@ impl ACNParser {
             } else {
                 return Some(PieceMove {
                     check_kind: Check::None,
-                   move_kind: PieceMoveKind::Normal(NormalMove {
+                    move_kind: PieceMoveKind::Normal(NormalMove {
                         piece_kind,
                         destination: Location::new(files.pop()?, ranks.pop()?),
                         disambiguation_file: None, // if we ran out of characters this soon, there is not disambiguation.
@@ -328,7 +327,7 @@ impl ACNParser {
 
         return Some(PieceMove {
             check_kind,
-           move_kind: PieceMoveKind::Normal(NormalMove {
+            move_kind: PieceMoveKind::Normal(NormalMove {
                 piece_kind,
                 destination: Location::new(files.pop()?, ranks.pop()?),
                 disambiguation_file: files.pop(),
@@ -347,8 +346,8 @@ mod tests {
 
     use crate::acn_parser::PieceMoveKind;
 
-    use super::Check;
     use super::parse_algebraic_notation;
+    use super::Check;
 
     #[test]
     fn parses_pawn_cases() {
@@ -366,7 +365,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("c4").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Pawn);
             assert!(!move_details.is_capture);
@@ -379,7 +378,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("cxd5").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Pawn);
             assert!(move_details.is_capture);
@@ -408,7 +407,7 @@ mod tests {
     #[test]
     fn parses_knight_cases() {
         let move_ = parse_algebraic_notation("Nf3").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Knight);
             assert!(!move_details.is_capture);
@@ -421,7 +420,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("Nxe5").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Knight);
             assert!(move_details.is_capture);
@@ -437,7 +436,7 @@ mod tests {
     #[test]
     fn parses_bishop_cases() {
         let move_ = parse_algebraic_notation("Bc4").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Bishop);
             assert!(!move_details.is_capture);
@@ -450,7 +449,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("Bd2").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Bishop);
             assert!(!move_details.is_capture);
@@ -463,7 +462,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("Bxb7").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Bishop);
             assert!(move_details.is_capture);
@@ -479,7 +478,7 @@ mod tests {
     #[test]
     fn parses_rook_moves() {
         let move_ = parse_algebraic_notation("Re3").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Rook);
             assert!(!move_details.is_capture);
@@ -492,7 +491,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("Rxc5").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Rook);
             assert!(move_details.is_capture);
@@ -505,7 +504,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("Re5+").unwrap();
-            assert!(move_.check_kind == Check::Check);
+        assert!(move_.check_kind == Check::Check);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Rook);
             assert!(!move_details.is_capture);
@@ -521,7 +520,7 @@ mod tests {
     #[test]
     fn parses_queen_moves() {
         let move_ = parse_algebraic_notation("Qc5").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Queen);
             assert!(!move_details.is_capture);
@@ -534,7 +533,7 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("Qa6xb7#").unwrap();
-            assert!(move_.check_kind == Check::Mate);
+        assert!(move_.check_kind == Check::Mate);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::Queen);
             assert!(move_details.is_capture);
@@ -550,7 +549,7 @@ mod tests {
     #[test]
     fn parses_king_moves() {
         let move_ = parse_algebraic_notation("Kh3").unwrap();
-            assert!(move_.check_kind == Check::None);
+        assert!(move_.check_kind == Check::None);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::King);
             assert!(!move_details.is_capture);
@@ -563,13 +562,29 @@ mod tests {
         }
 
         let move_ = parse_algebraic_notation("Kxa1#").unwrap();
-            assert!(move_.check_kind == Check::Mate);
+        assert!(move_.check_kind == Check::Mate);
         if let PieceMoveKind::Normal(move_details) = move_.move_kind {
             assert!(move_details.piece_kind == PieceKind::King);
             assert!(move_details.is_capture);
             assert!(move_details.disambiguation_file.is_none());
             assert!(move_details.disambiguation_rank.is_none());
             assert!(move_details.destination == Location::new(File::a, Rank::One));
+            assert!(move_details.promotion_kind == None);
+        } else {
+            panic!("Expected PieceMove::Normal");
+        }
+    }
+
+    #[test]
+    fn parses_pawn_capture_correctly() {
+        let move_ = parse_algebraic_notation("axb4").unwrap();
+        assert!(move_.check_kind == Check::None);
+        if let PieceMoveKind::Normal(move_details) = move_.move_kind {
+            assert!(move_details.piece_kind == PieceKind::Pawn);
+            assert!(move_details.is_capture);
+            assert!(move_details.disambiguation_file == Some(File::a));
+            assert!(move_details.disambiguation_rank.is_none());
+            assert!(move_details.destination == Location::new(File::b, Rank::Four));
             assert!(move_details.promotion_kind == None);
         } else {
             panic!("Expected PieceMove::Normal");

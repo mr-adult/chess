@@ -8,7 +8,7 @@ use chess_common::{File, Location, Piece, PieceKind, Player, Rank};
 
 /// A struct that represents a string
 /// of valid FEN data
-pub struct Fen(String);
+pub struct Fen(pub String);
 impl Fen {
     pub fn as_str(&self) -> &str {
         &self.0
@@ -315,7 +315,7 @@ impl<'fen> FenParser<'fen> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BoardLayout {
     placement: [[Option<Piece>; 8]; 8],
     player_to_move: Player,
