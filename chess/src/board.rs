@@ -709,17 +709,21 @@ impl Board {
     }
 
     unsafe fn move_piece(&mut self, move_: &Move, piece: &Piece) {
-        // FUTURE: optimize this by taking advantage of the piece being
-        // the same for both operations
-        unsafe { self.remove_piece_at(&move_.from, piece) };
-        unsafe { self.add_piece_at(&move_.to, piece) };
+        let bitboard = self.get_bitboard_for(&piece);
+
+        // Remove the piece at its old location
+        bitboard.0 ^= move_.from.as_u64();
+        // Add the piece at its new location
+        bitboard.0 ^= move_.to.as_u64();
     }
 
     unsafe fn move_piece_rev(&mut self, move_: &Move, piece: &Piece) {
-        // FUTURE: optimize this by taking advantage of the piece being
-        // the same for both operations
-        unsafe { self.remove_piece_at(&move_.to, piece) };
-        unsafe { self.add_piece_at(&move_.from, piece) };
+        let bitboard = self.get_bitboard_for(piece);
+
+        // Remove the piece at its new location
+        bitboard.0 ^= move_.to.as_u64();
+        // Add the piece at its old location
+        bitboard.0 ^= move_.from.as_u64();
     }
 
     unsafe fn remove_piece_at(&mut self, location: &Location, piece: &Piece) {
@@ -731,15 +735,18 @@ impl Board {
     }
 
     unsafe fn xor_piece_at(&mut self, location: &Location, piece: &Piece) {
+        self.get_bitboard_for(piece).0 ^= location.as_u64();
+    }
+
+    fn get_bitboard_for(&mut self, piece: &Piece) -> &mut BitBoard {
         let player = piece.player().as_index();
-        let location = location.as_u64();
         match piece.kind() {
-            PieceKind::Pawn => self.pawns[player].0 ^= location,
-            PieceKind::Knight => self.knights[player].0 ^= location,
-            PieceKind::Bishop => self.bishops[player].0 ^= location,
-            PieceKind::Rook => self.rooks[player].0 ^= location,
-            PieceKind::Queen => self.queens[player].0 ^= location,
-            PieceKind::King => self.kings[player].0 ^= location,
+            PieceKind::Pawn => &mut self.pawns[player],
+            PieceKind::Knight => &mut self.knights[player],
+            PieceKind::Bishop => &mut self.bishops[player],
+            PieceKind::Rook => &mut self.rooks[player],
+            PieceKind::Queen => &mut self.queens[player],
+            PieceKind::King => &mut self.kings[player],
         }
     }
 
