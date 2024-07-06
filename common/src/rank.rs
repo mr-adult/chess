@@ -2,6 +2,8 @@ use std::array::IntoIter;
 
 use serde::{de::Visitor, Deserialize, Serialize};
 
+use crate::Player;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Rank {
     One = 1,
@@ -16,6 +18,13 @@ pub enum Rank {
 
 pub type RanksIterator = IntoIter<Rank, 8>;
 impl Rank {
+    pub const fn castle(player: &Player) -> Rank {
+        match player {
+            Player::White => Rank::One,
+            Player::Black => Rank::Eight,
+        }
+    }
+
     pub fn all_ranks_ascending() -> RanksIterator {
         [
             Self::One,

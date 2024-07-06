@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde_derive::Deserialize;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
 pub enum PieceKind {

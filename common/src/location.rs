@@ -10,7 +10,7 @@ pub struct Location {
 }
 
 impl Location {
-    pub fn new(file: File, rank: Rank) -> Self {
+    pub const fn new(file: File, rank: Rank) -> Self {
         Self { file, rank }
     }
 

@@ -17,6 +17,21 @@ pub enum File {
 
 pub type FilesIterator = IntoIter<File, 8>;
 impl File {
+    #[inline]
+    pub const fn castle_kingside_destination() -> Self {
+        Self::g
+    }
+
+    #[inline]
+    pub const fn castle_queenside_destination() -> Self {
+        Self::c
+    }
+
+    #[inline]
+    pub const fn king_starting() -> Self {
+        Self::e
+    }
+
     pub fn all_files_ascending() -> FilesIterator {
         [
             Self::a,
