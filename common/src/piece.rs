@@ -9,6 +9,9 @@ pub struct Piece {
 }
 
 impl Piece {
+    pub const WHITE_PAWN: Piece = Piece::new(Player::White, PieceKind::Pawn);
+    pub const BLACK_PAWN: Piece = Piece::new(Player::Black, PieceKind::Pawn);
+
     pub const fn new(player: Player, kind: PieceKind) -> Self {
         Self { kind, player }
     }

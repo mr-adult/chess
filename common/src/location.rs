@@ -1,9 +1,9 @@
 use std::vec::IntoIter;
 
-use crate::{file::File, rank::Rank};
+use crate::{file::File, rank::Rank, Player};
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Location {
     pub(crate) file: File,
     pub(crate) rank: Rank,
@@ -12,6 +12,10 @@ pub struct Location {
 impl Location {
     pub const fn new(file: File, rank: Rank) -> Self {
         Self { file, rank }
+    }
+
+    pub const fn king_starting(player: &Player) -> Self {
+        Self::new(File::king_starting(), Rank::castle(player))
     }
 
     pub fn all_locations() -> impl Iterator<Item = Self> {
