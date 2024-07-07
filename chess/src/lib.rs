@@ -1,8 +1,10 @@
 mod bitboard;
 mod board;
-mod chess_move;
 mod legal_moves;
+mod moves;
 mod possible_moves;
 
 pub use board::Board;
-pub use chess_move::{Move, PossibleMove, SelectedMove};
+pub use legal_moves::LegalMovesIterator;
+pub use moves::{Move, PossibleMove, SelectedMove};
+pub use possible_moves::PossibleMovesIterator;

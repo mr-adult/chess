@@ -22,7 +22,7 @@ struct CurrentRookData {
 
 impl<'board> LegalRookMovesIterator<'board> {
     pub(crate) fn new(board: &'board Board) -> Self {
-        let player_to_move = board.get_player_to_move();
+        let player_to_move = board.player_to_move();
         let other_player = player_to_move.other_player();
 
         let friendlies = board.create_mailbox_for_player(player_to_move);
@@ -31,7 +31,7 @@ impl<'board> LegalRookMovesIterator<'board> {
         Self {
             board: board,
             rook_locations: Location::from_bitboard(
-                board.rooks[board.get_player_to_move().as_index()].0,
+                board.rooks[board.player_to_move().as_index()].0,
             ),
             current_rook_data: None,
             friendlies,
@@ -55,9 +55,10 @@ impl<'board> Iterator for LegalRookMovesIterator<'board> {
                 None => match self.rook_locations.next() {
                     None => return None,
                     Some(location) => {
+                        let location_u64 = location.as_u64();
                         let move_data = CurrentRookData {
                             from_location: location,
-                            to_locations: RookMovesIterator::new(BitBoard::new(location.as_u64())),
+                            to_locations: RookMovesIterator::new(BitBoard::new(location_u64)),
                         };
                         self.current_rook_data = Some(move_data);
                         self.current_rook_data.as_mut().unwrap()
@@ -81,7 +82,7 @@ impl<'board> Iterator for LegalRookMovesIterator<'board> {
                     }
 
                     return Some(Move {
-                        from: current_rook_data.from_location,
+                        from: current_rook_data.from_location.clone(),
                         to: Location::try_from(to_location.0)
                             .expect(Location::failed_from_usize_message()),
                     });

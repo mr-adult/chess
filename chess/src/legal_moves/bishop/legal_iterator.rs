@@ -22,7 +22,7 @@ struct CurrentBishopData {
 
 impl<'board> LegalBishopMovesIterator<'board> {
     pub(crate) fn new(board: &'board Board) -> Self {
-        let player_to_move = board.get_player_to_move();
+        let player_to_move = board.player_to_move();
         let other_player = player_to_move.other_player();
 
         let friendlies = board.create_mailbox_for_player(player_to_move);
@@ -31,7 +31,7 @@ impl<'board> LegalBishopMovesIterator<'board> {
         Self {
             board: board,
             bishop_locations: Location::from_bitboard(
-                board.bishops[board.get_player_to_move().as_index()].0,
+                board.bishops[board.player_to_move().as_index()].0,
             ),
             current_bishop_data: None,
             friendlies,
@@ -56,7 +56,7 @@ impl<'board> Iterator for LegalBishopMovesIterator<'board> {
                     None => return None,
                     Some(location) => {
                         let move_data = CurrentBishopData {
-                            from_location: location,
+                            from_location: location.clone(),
                             to_locations: BishopMovesIterator::new(BitBoard::new(
                                 location.as_u64(),
                             )),
@@ -83,7 +83,7 @@ impl<'board> Iterator for LegalBishopMovesIterator<'board> {
                     }
 
                     return Some(Move {
-                        from: current_bishop_data.from_location,
+                        from: current_bishop_data.from_location.clone(),
                         to: Location::try_from(to_location.0)
                             .expect(Location::failed_from_usize_message()),
                     });

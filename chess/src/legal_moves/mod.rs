@@ -1,7 +1,7 @@
 use arr_deque::ArrDeque;
 use chess_common::{Location, Player, Rank};
 
-use crate::{chess_move::PossibleMove, Board, Move};
+use crate::{moves::PossibleMove, Board, Move};
 mod bishop;
 mod king;
 mod knight;
@@ -33,7 +33,7 @@ pub struct LegalMovesIterator<'board> {
 
 impl<'board> LegalMovesIterator<'board> {
     pub(crate) fn for_board(board: &'board Board) -> Self {
-        let player_to_move = board.get_player_to_move();
+        let player_to_move = board.player_to_move();
         Self {
             board,
             player: player_to_move,

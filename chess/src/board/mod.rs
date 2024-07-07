@@ -1,42 +1,24 @@
-use std::{
-    array::from_fn,
-    iter,
-    ops::{Index, IndexMut},
-    str::FromStr,
-};
+mod acn_move_err;
+use acn_move_err::AcnMoveErr;
+mod move_err;
+use move_err::MoveErr;
+mod undoable_move;
+use undoable_move::UndoableMove;
+
+use std::str::FromStr;
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{
-    parse_algebraic_notation, parse_fen, BoardLayout, Check, FenErr, NormalMove, PieceMove,
-    PieceMoveKind,
+    parse_algebraic_notation, parse_fen, BoardLayout, Check, FenErr, NormalMove, PieceLocations, PieceMove, PieceMoveKind
 };
 
 use crate::{
     bitboard::BitBoard,
-    chess_move::SelectedMove,
+    SelectedMove,
     legal_moves::{LegalKingMovesIterator, LegalMovesIterator},
     possible_moves::PossibleMovesIterator,
     Move,
 };
-
-#[derive(Debug)]
-pub struct ErgonomicBoard {
-    pieces: [[Option<Piece>; 8]; 8],
-}
-
-impl Index<Location> for ErgonomicBoard {
-    type Output = Option<Piece>;
-
-    fn index(&self, index: Location) -> &Self::Output {
-        &self.pieces[index.rank().as_index()][index.file().as_index()]
-    }
-}
-
-impl IndexMut<Location> for ErgonomicBoard {
-    fn index_mut(&mut self, index: Location) -> &mut Self::Output {
-        &mut self.pieces[index.rank().as_index()][index.file().as_index()]
-    }
-}
 
 #[derive(Debug)]
 pub struct Board {
@@ -51,6 +33,12 @@ pub struct Board {
     pub(crate) mailbox: BitBoard,
     history: Vec<UndoableMove>,
     first_player_to_move: Player,
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Self::from_str("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
+    }
 }
 
 impl FromStr for Board {
@@ -78,146 +66,13 @@ impl From<BoardLayout> for Board {
             first_player_to_move: player_to_move,
         };
 
-        for rank in Rank::all_ranks_ascending() {
-            for file in File::all_files_ascending() {
-                let location = Location::new(file, rank);
-                let location_u64 = location.as_u64();
-
-                match result.starting_position[location] {
-                    None => continue,
-                    Some(piece) => {
-                        let piece_kind = piece.kind();
-                        let player = piece.player();
-
-                        match piece_kind {
-                            PieceKind::Pawn => match player {
-                                Player::White => {
-                                    result.pawns[white!()].0 |= location_u64;
-                                }
-                                Player::Black => {
-                                    result.pawns[black!()].0 |= location_u64;
-                                }
-                            },
-                            PieceKind::Knight => match player {
-                                Player::White => {
-                                    result.knights[white!()].0 |= location_u64;
-                                }
-                                Player::Black => {
-                                    result.knights[black!()].0 |= location_u64;
-                                }
-                            },
-                            PieceKind::Bishop => match player {
-                                Player::White => {
-                                    result.bishops[white!()].0 |= location_u64;
-                                }
-                                Player::Black => {
-                                    result.bishops[black!()].0 |= location_u64;
-                                }
-                            },
-                            PieceKind::Rook => match player {
-                                Player::White => {
-                                    result.rooks[white!()].0 |= location_u64;
-                                }
-                                Player::Black => {
-                                    result.rooks[black!()].0 |= location_u64;
-                                }
-                            },
-                            PieceKind::Queen => match player {
-                                Player::White => {
-                                    result.queens[white!()].0 |= location_u64;
-                                }
-                                Player::Black => {
-                                    result.queens[black!()].0 |= location_u64;
-                                }
-                            },
-                            PieceKind::King => match player {
-                                Player::White => {
-                                    result.kings[white!()].0 |= location_u64;
-                                }
-                                Player::Black => {
-                                    result.kings[black!()].0 |= location_u64;
-                                }
-                            },
-                        }
-                    }
-                }
+        for location in Location::all_locations() {
+            if let Some(piece) = result.starting_position[&location] {
+                result.get_bitboard_for(&piece).0 |= location.as_u64();
             }
         }
 
         result.update_mailbox();
-        result
-    }
-}
-
-impl ToString for Board {
-    fn to_string(&self) -> String {
-        self.assert_board_integrity();
-
-        // FEN notation can only be 84 bytes max
-        let mut result = String::with_capacity(84);
-        for (rank_num, rank) in Rank::all_ranks_ascending().rev().enumerate() {
-            if rank_num != 0 {
-                result.push('/');
-            }
-
-            let mut empty_spaces = 0;
-            for file in File::all_files_ascending() {
-                match self.at(&Location::new(file, rank)) {
-                    None => empty_spaces += 1,
-                    Some(piece) => {
-                        if empty_spaces > 0 {
-                            result.push_str(&empty_spaces.to_string());
-                            empty_spaces = 0;
-                        }
-
-                        result.push(piece.to_fen());
-                    }
-                }
-            }
-            if empty_spaces > 0 {
-                result.push_str(&empty_spaces.to_string());
-            }
-        }
-
-        result.push(' ');
-        result.push(self.get_player_to_move().as_char());
-
-        result.push(' ');
-        let mut any_castling_allowed = false;
-        if self.white_can_castle_kingside() {
-            any_castling_allowed = true;
-            result.push('K');
-        }
-        if self.white_can_castle_queenside() {
-            any_castling_allowed = true;
-            result.push('Q');
-        }
-        if self.black_can_castle_kingside() {
-            any_castling_allowed = true;
-            result.push('k');
-        }
-        if self.black_can_castle_queenside() {
-            any_castling_allowed = true;
-            result.push('q');
-        }
-        if !any_castling_allowed {
-            result.push('-')
-        }
-
-        result.push(' ');
-        if let Some(location) = self.en_passant_target_square() {
-            result.push(location.file().as_char());
-            result.push(location.rank().as_char());
-        } else {
-            result.push('-');
-        }
-
-        result.push(' ');
-        result.push_str(&self.half_moves_played().to_string());
-
-        result.push(' ');
-        result.push_str(&self.full_moves_played().to_string());
-
         result
     }
 }
@@ -227,22 +82,34 @@ impl Board {
         &self.starting_position
     }
 
+    /// Calculates the material advantage of the current board position,
+    /// assuming that pawns are worth 1 point, knights and bishops are worth 3 points,
+    /// rooks are worth 5 points, and queens are worth 8 points.
+    pub fn material_advantage(&self) -> i32 {
+        let pawn_diff = self.pawns[white!()].bit_count() - self.pawns[black!()].bit_count();
+        let knight_diff = self.knights[white!()].bit_count() - self.knights[black!()].bit_count();
+        let bishop_diff = self.bishops[white!()].bit_count() - self.bishops[black!()].bit_count();
+        let rook_diff = self.rooks[white!()].bit_count() - self.rooks[black!()].bit_count();
+        let queen_diff = self.queens[white!()].bit_count() - self.queens[black!()].bit_count();
+
+        return pawn_diff
+            + knight_diff * 3
+            + bishop_diff * 3
+            + rook_diff * 5
+            + queen_diff * 5
+            + rook_diff * 8;
+    }
+
+    /// Loops through the bitboards and updates the mailbox bitboard.
+    /// with the new piece locations. This should be called any time
+    /// one of the pieces changes position or a piece is added/removed
+    /// from the board.
     fn update_mailbox(&mut self) {
-        // first, clear it
-        self.mailbox.0 &= 0_u64;
-        for bitboard in [
-            &self.pawns,
-            &self.knights,
-            &self.bishops,
-            &self.rooks,
-            &self.queens,
-            &self.kings,
-        ]
-        .into_iter()
-        .flat_map(|arr| arr)
-        {
-            self.mailbox.0 |= bitboard.0
+        let mut result = 0;
+        for bitboard in self.all_bitboards() {
+            result |= bitboard.0;
         }
+        self.mailbox = BitBoard::new(result);
     }
 
     #[cfg(debug_assertions)]
@@ -250,14 +117,6 @@ impl Board {
         for (i, bitboard_1) in self.all_bitboards().enumerate() {
             for (j, bitboard_2) in self.all_bitboards().enumerate() {
                 if bitboard_1 as *const BitBoard == bitboard_2 as *const BitBoard {
-                    continue;
-                }
-
-                if bitboard_1 as *const BitBoard == &self.mailbox as *const BitBoard {
-                    continue;
-                }
-
-                if bitboard_2 as *const BitBoard == &self.mailbox as *const BitBoard {
                     continue;
                 }
 
@@ -276,6 +135,7 @@ impl Board {
         }
     }
 
+    /// Retrieves all bitboards (except the mailbox bitboard)
     fn all_bitboards(&self) -> impl Iterator<Item = &BitBoard> {
         return self
             .pawns
@@ -284,10 +144,10 @@ impl Board {
             .chain(self.bishops.iter())
             .chain(self.rooks.iter())
             .chain(self.queens.iter())
-            .chain(self.kings.iter())
-            .chain(iter::once(&self.mailbox));
+            .chain(self.kings.iter());
     }
 
+    /// Creates a mailbox bitboard for the specified player.
     pub(crate) fn create_mailbox_for_player(&self, player: Player) -> BitBoard {
         let player_index = player.as_index();
         return BitBoard::new(
@@ -300,7 +160,8 @@ impl Board {
         );
     }
 
-    pub(crate) fn get_player_to_move(&self) -> Player {
+    /// Gets the player whose turn it currently is.
+    pub fn player_to_move(&self) -> Player {
         if self.history.len() % 2 == 0 {
             return self.first_player_to_move;
         } else {
@@ -308,6 +169,7 @@ impl Board {
         }
     }
 
+    /// Gets whether or not the specified player can castle kingside.
     pub(crate) fn player_can_castle_kingside(&self, player: &Player) -> bool {
         match player {
             Player::Black => self.black_can_castle_kingside(),
@@ -315,6 +177,7 @@ impl Board {
         }
     }
 
+    /// Gets whether or not white can castle kingside.
     fn white_can_castle_kingside(&self) -> bool {
         if !self.starting_position.white_can_castle_kingside() {
             return false;
@@ -322,23 +185,25 @@ impl Board {
 
         return !self.history.iter().any(|undoable_move| {
             let move_ = undoable_move.move_();
-            move_.from == Location::new(File::e, Rank::One)
-                || move_.from == Location::new(File::h, Rank::One)
+            move_.from == Location::king_starting(&Player::White)
+                || move_.from == Location::new(File::h, Rank::castle(&Player::White))
         });
     }
 
+    /// Gets whether or not black can castle kingside.
     fn black_can_castle_kingside(&self) -> bool {
         if !self.starting_position.black_can_castle_kingside() {
             return false;
         }
 
         return !self.history.iter().any(|undoable_move| {
-            let move_ = undoable_move.move_();
-            move_.from == Location::new(File::e, Rank::Eight)
-                || move_.from == Location::new(File::h, Rank::Eight)
+            let move_from = &undoable_move.move_().from;
+            *move_from == Location::king_starting(&Player::Black)
+                || *move_from == Location::new(File::h, Rank::castle(&Player::Black))
         });
     }
 
+    /// Gets whether or not the specified player can castle queenside.
     pub(crate) fn player_can_castle_queenside(&self, player: &Player) -> bool {
         match player {
             Player::Black => self.black_can_castle_queenside(),
@@ -346,6 +211,7 @@ impl Board {
         }
     }
 
+    /// Gets whether or not white can castle queenside.
     fn white_can_castle_queenside(&self) -> bool {
         if !self.starting_position.white_can_castle_queenside() {
             return false;
@@ -358,6 +224,7 @@ impl Board {
         });
     }
 
+    /// Gets whether or not black can castle queenside.
     fn black_can_castle_queenside(&self) -> bool {
         if !self.starting_position.black_can_castle_queenside() {
             return false;
@@ -370,10 +237,14 @@ impl Board {
         });
     }
 
+    /// Gets the number of half-moves played in the current game as defined
+    /// by Forsyth–Edwards Notation.
     fn half_moves_played(&self) -> u8 {
         self.starting_position.half_move_counter() + self.history.len() as u8
     }
 
+    /// Gets the number of full-moves played in the current game as defined
+    /// by Forsyth–Edwards Notation.
     fn full_moves_played(&self) -> u8 {
         let history_len_u8 = self.history.len() as u8;
         match self.starting_position.player_to_move() {
@@ -384,7 +255,9 @@ impl Board {
         }
     }
 
+    /// Gets the current en-passant target square (if there is one).
     pub(crate) fn en_passant_target_square(&self) -> Option<Location> {
+        // if a move has been made, refer to it.
         if let Some(last_move) = self.history.last() {
             let last_move = last_move.move_();
             if let Some(last_moved) = self.at(&last_move.to) {
@@ -405,27 +278,34 @@ impl Board {
                     }
                 }
             }
+            // if no move has been made, reference the initial board state's en-passant target.
         } else if let Some(location) = self.starting_position.en_passant_target_square() {
-            return Some(location);
+            return Some(location.clone());
         }
 
         return None;
     }
 
+    /// Gets whether the current position is a check for the player whose turn
+    /// it is.
     fn is_check(&self) -> bool {
-        let player_to_move = self.get_player_to_move();
+        let player_to_move = self.player_to_move();
         let king_position = self.kings[player_to_move.as_index()].0;
         LegalKingMovesIterator::is_check(self, player_to_move, king_position)
     }
 
-    fn is_check_mate(&self) -> bool {
+    /// Gets whether the current position is a checkmate for the player whose turn
+    /// it is.
+    pub fn is_check_mate(&self) -> bool {
         self.legal_moves().next().is_none() && self.is_check()
     }
 
+    /// Gets whether the current position is stalemate.
     fn is_stale_mate(&self) -> bool {
         self.legal_moves().next().is_none() && !self.is_check()
     }
 
+    /// Gets the piece at the specified location.
     fn at(&self, location: &Location) -> Option<Piece> {
         let location_bits = location.as_u64();
 
@@ -492,22 +372,6 @@ impl Board {
         return None;
     }
 
-    pub fn into_ergo_board(&self) -> ErgonomicBoard {
-        self.assert_board_integrity();
-        let mut result = ErgonomicBoard {
-            pieces: from_fn(|_| from_fn(|_| None)),
-        };
-
-        for rank in Rank::all_ranks_ascending() {
-            for file in File::all_files_ascending() {
-                let location = Location::new(file, rank);
-                result[location] = self.at(&location);
-            }
-        }
-
-        result
-    }
-
     /// Gets the list of historical moves in algebraic chess
     /// notation.
     pub fn get_move_history_acn(&self) -> Vec<PieceMove> {
@@ -515,7 +379,7 @@ impl Board {
             return Vec::with_capacity(0);
         }
 
-        // Clone the board so we can replay the moves
+        // Clone the board in its initial state so we can replay the moves
         let mut temp_board = Self::from(self.starting_position.clone());
         let mut result = Vec::with_capacity(self.history.len());
 
@@ -576,7 +440,7 @@ impl Board {
 
                 PieceMoveKind::Normal(NormalMove {
                     piece_kind: moving_piece.kind(),
-                    destination: move_.to,
+                    destination: move_.to.clone(),
                     disambiguation_file,
                     disambiguation_rank,
                     is_capture,
@@ -602,7 +466,7 @@ impl Board {
                 UndoableMove::Promotion { move_, promoted_to } => {
                     PieceMoveKind::Normal(NormalMove {
                         piece_kind: PieceKind::Pawn,
-                        destination: move_.to,
+                        destination: move_.to.clone(),
                         disambiguation_file: None,
                         disambiguation_rank: None,
                         is_capture: false,
@@ -616,14 +480,14 @@ impl Board {
 
                     let mut disambiguation_file = None;
                     if let Ok(potential_disambiguation_file) = File::try_from(from_file - ((to_file - from_file) << 1 /* faster multiply by 2 */)) {
-                        if temp_board.pawns[temp_board.get_player_to_move().as_index()].intersects_with_u64(Location::new(potential_disambiguation_file, move_.from.rank()).as_u64()) {
+                        if temp_board.pawns[temp_board.player_to_move().as_index()].intersects_with_u64(Location::new(potential_disambiguation_file, move_.from.rank()).as_u64()) {
                             disambiguation_file = Some(potential_disambiguation_file);
                         }
                     }
 
                     PieceMoveKind::Normal(NormalMove {
                         piece_kind: PieceKind::Pawn,
-                        destination: move_.to,
+                        destination: move_.to.clone(),
                         disambiguation_file: disambiguation_file,
                         disambiguation_rank: None, // rank is never ambiguous in a promotion
                         is_capture: true,
@@ -667,7 +531,7 @@ impl Board {
     /// Makes a move where the move is passed in in algebraic chess notation
     pub fn make_move_acn(&mut self, acn: &str) -> Result<(), AcnMoveErr> {
         if let Some(move_) = parse_algebraic_notation(acn.trim()) {
-            let player_to_move = self.get_player_to_move();
+            let player_to_move = self.player_to_move();
             let selected_move = match move_.move_kind {
                 PieceMoveKind::CastleKingside => {
                     // No need to validate its legality. make_move() will do that.
@@ -791,9 +655,6 @@ impl Board {
         self.make_move_unchecked(move_)
     }
 
-    const WHITE_PAWN: Piece = Piece::new(Player::White, PieceKind::Pawn);
-    const BLACK_PAWN: Piece = Piece::new(Player::Black, PieceKind::Pawn);
-
     /// Makes a move while skipping some of the more expensive validity checks.
     ///
     /// This function does not check if the move is legal.
@@ -836,8 +697,8 @@ impl Board {
                         self.remove_piece_at(
                             captured_pawn_location,
                             match piece_to_move.player().other_player() {
-                                Player::White => &Self::WHITE_PAWN,
-                                Player::Black => &Self::BLACK_PAWN,
+                                Player::White => &Piece::WHITE_PAWN,
+                                Player::Black => &Piece::BLACK_PAWN,
                             },
                         );
 
@@ -881,7 +742,6 @@ impl Board {
                     },
                 }
 
-                println!("{move_kind:?}");
                 self.history.push(move_kind);
                 self.update_mailbox();
                 return Ok(());
@@ -1040,7 +900,7 @@ impl Board {
         match self.history.pop() {
             None => Err(()),
             Some(last_move) => {
-                let player_to_undo = self.get_player_to_move();
+                let player_to_undo = self.player_to_move();
                 let piece_to_undo = self.at(&last_move.move_().to).expect(
                     "BOARD INTEGRITY: no piece found at 'to' location of move on top of undo stack",
                 );
@@ -1056,8 +916,8 @@ impl Board {
                         self.add_piece_at(
                             captured_pawn_location,
                             match player_to_undo.other_player() {
-                                Player::White => &Self::WHITE_PAWN,
-                                Player::Black => &Self::BLACK_PAWN,
+                                Player::White => &Piece::WHITE_PAWN,
+                                Player::Black => &Piece::BLACK_PAWN,
                             },
                         );
                     },
@@ -1110,101 +970,51 @@ impl Board {
             }
         }
     }
-}
 
-pub enum AcnMoveErr {
-    /// Signifies an error in parsing the algebraic chess notation string.
-    Acn,
-    /// Signifies that the ACN string's check status mismatched the board state.
-    CheckStateMismatch,
-    /// Signifies that multiple legal moves matched the ACN string.
-    AmbiguousMove,
-    /// Signifies that the move could not be made with the reason.
-    Move(MoveErr),
-}
-
-impl From<MoveErr> for AcnMoveErr {
-    fn from(value: MoveErr) -> Self {
-        Self::Move(value)
+    pub fn to_fen_string(&self) -> String {
+        let layout: BoardLayout = self.into();
+        layout.to_string()
     }
 }
 
-#[derive(Debug)]
-pub enum MoveErr {
-    IllegalMove,
-    NoPieceAtFromLocation,
-    IllegalPromotionPieceChoice,
-    PromotionTargetNotPawn,
-    MislabeledPromotion,
+impl Into<BoardLayout> for Board {
+    fn into(self) -> BoardLayout {
+        (&self).into()
+    }
 }
 
-#[derive(Debug)]
-pub enum UndoableMove {
-    Promotion {
-        move_: Move,
-        // algebraic_notation: String,
-        promoted_to: PieceKind,
-    },
-    EnPassant {
-        move_: Move,
-        // algebraic_notation: String,
-        captured_pawn_location: Location,
-    },
-    Normal {
-        move_: Move,
-        // algebraic_notation: String,
-    },
-    Capture {
-        move_: Move,
-        // algebraic_notation: String,
-        captured_piece: Piece,
-    },
-    CapturePromotion {
-        move_: Move,
-        captured_piece: Piece,
-        promoted_to: PieceKind,
-    },
-    Castles {
-        move_: Move,
-        rook_move: Move,
-    },
+impl Into<BoardLayout> for &Board {
+    fn into(self) -> BoardLayout {
+        let piece_locations: PieceLocations = self.into();
+
+        BoardLayout::new(
+            piece_locations, 
+            self.player_to_move(), 
+            self.white_can_castle_kingside(), 
+            self.white_can_castle_queenside(), 
+            self.black_can_castle_kingside(), 
+            self.black_can_castle_queenside(), 
+            self.en_passant_target_square(), 
+            self.half_moves_played(), 
+            self.full_moves_played())
+    }
 }
 
-impl UndoableMove {
-    pub fn move_(&self) -> &Move {
-        match self {
-            Self::Promotion { move_, .. } => move_,
-            Self::EnPassant { move_, .. } => move_,
-            Self::Normal { move_, .. } => move_,
-            Self::Capture { move_, .. } => move_,
-            Self::CapturePromotion { move_, .. } => move_,
-            Self::Castles { move_, .. } => move_,
+impl Into<PieceLocations> for Board {
+    fn into(self) -> PieceLocations {
+        (&self).into()
+    }
+}
+
+impl Into<PieceLocations> for &Board {
+    fn into(self) -> PieceLocations {
+        self.assert_board_integrity();
+        let mut result = PieceLocations::default();
+
+        for location in Location::all_locations() {
+            result[&location] = self.at(&location);
         }
-    }
-}
 
-impl Into<SelectedMove> for &UndoableMove {
-    fn into(self) -> SelectedMove {
-        match self {
-            UndoableMove::Promotion { move_, promoted_to }
-            | UndoableMove::CapturePromotion {
-                move_, promoted_to, ..
-            } => SelectedMove::Promotion {
-                move_: move_.clone(),
-                promotion_kind: *promoted_to,
-            },
-            UndoableMove::EnPassant { move_, .. }
-            | UndoableMove::Normal { move_ }
-            | UndoableMove::Capture { move_, .. }
-            | UndoableMove::Castles { move_, .. } => SelectedMove::Normal {
-                move_: move_.clone(),
-            },
-        }
-    }
-}
-
-impl Default for Board {
-    fn default() -> Self {
-        Self::from_str("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
+        result
     }
 }

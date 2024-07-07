@@ -12,7 +12,7 @@ pub(crate) struct LegalPawnMovesIterator<'board> {
 
 impl<'board> LegalPawnMovesIterator<'board> {
     pub(crate) fn new(board: &'board Board) -> Self {
-        let moving_player = board.get_player_to_move();
+        let moving_player = board.player_to_move();
         let hostile_player = moving_player.other_player();
         Self {
             board,
@@ -35,7 +35,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
 
         while let Some(location) = self.pawn_locations.next() {
             let location_bb = BitBoard::new(location.as_u64());
-            match self.board.get_player_to_move() {
+            match self.board.player_to_move() {
                 Player::White => {
                     let new_location = location_bb.up();
 
@@ -50,7 +50,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                             debug_assert!(self
                                 .lookahead
                                 .push_back(Move {
-                                    from: location,
+                                    from: location.clone(),
                                     to: Location::try_from(new_location_double.0)
                                         .expect(Location::failed_from_usize_message()),
                                 })
@@ -71,7 +71,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                                 || capture_square.intersects_with_u64(en_passant_target))
                         {
                             debug_assert!(self.lookahead.push_back(Move {
-                                    from: location,
+                                    from: location.clone(),
                                     to: Location::try_from(capture_square.0).expect("Conversion of capture square to location should never fail"),
                                 }).is_ok());
                         }
@@ -101,7 +101,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                             debug_assert!(self
                                 .lookahead
                                 .push_back(Move {
-                                    from: location,
+                                    from: location.clone(),
                                     to: Location::try_from(new_location_double.0)
                                         .expect(Location::failed_from_usize_message()),
                                 })
@@ -122,7 +122,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                                 || capture_square.intersects_with_u64(en_passant_target))
                         {
                             debug_assert!(self.lookahead.push_back(Move {
-                                    from: location,
+                                    from: location.clone(),
                                     to: Location::try_from(capture_square.0).expect("Conversion of capture square to location should never fail"),
                                 }).is_ok());
                         }

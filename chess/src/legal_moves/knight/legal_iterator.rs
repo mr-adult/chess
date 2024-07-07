@@ -15,7 +15,7 @@ pub(crate) struct LegalKnightMovesIterator<'board> {
 
 impl<'board> LegalKnightMovesIterator<'board> {
     pub(crate) fn new(board: &'board Board) -> Self {
-        let player_to_move = board.get_player_to_move();
+        let player_to_move = board.player_to_move();
         let player_to_move_index = player_to_move.as_index();
         Self {
             board: &board,
@@ -46,7 +46,7 @@ impl<'board> Iterator for LegalKnightMovesIterator<'board> {
                 assert!(self
                     .lookahead
                     .push_back(Move {
-                        from: location,
+                        from: location.clone(),
                         to: Location::try_from(knight_move.0)
                             .expect(Location::failed_from_usize_message()),
                     })

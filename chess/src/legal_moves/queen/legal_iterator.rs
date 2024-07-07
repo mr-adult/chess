@@ -11,7 +11,7 @@ pub(crate) struct LegalQueenMovesIterator<'board> {
 
 impl<'board> LegalQueenMovesIterator<'board> {
     pub(crate) fn new(board: &'board Board) -> Self {
-        let player_to_move = board.get_player_to_move().as_index();
+        let player_to_move = board.player_to_move().as_index();
         let queen_bb = &board.queens[player_to_move];
         Self {
             bishop_moves: LegalBishopMovesIterator::new_for_bitboard(&board, queen_bb),

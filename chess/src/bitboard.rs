@@ -64,6 +64,20 @@ impl BitBoard {
     pub(crate) fn intersects_with_u64(&self, other: u64) -> bool {
         (self.0 & other) != 0
     }
+
+    pub(crate) fn bit_count(&self) -> i32 {
+        let mut total = 0;
+
+        let mut value = self.0;
+        while value != 0 {
+            if value & 1 != 0 {
+                total += 1;
+            }
+            value = value >> 1;
+        }
+
+        total
+    }
 }
 
 impl BitAnd for BitBoard {
