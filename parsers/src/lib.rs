@@ -1,13 +1,10 @@
 mod pgn_parser;
 use pgn_parser::PgnParser;
 pub use pgn_parser::{ParsedGame, PgnErr};
-
-use fen_parser::FenParser;
-pub use fen_parser::{BoardLayout, FenErr};
-
+mod fen;
+use fen::FenParser;
+pub use fen::{BoardLayout, FenErr, PieceLocations};
 mod acn_parser;
-mod fen_parser;
-
 pub use acn_parser::{parse_algebraic_notation, Check, NormalMove, PieceMove, PieceMoveKind};
 
 pub fn parse_pgn(pgn: &[u8]) -> Result<Vec<ParsedGame>, PgnErr> {

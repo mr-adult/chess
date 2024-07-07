@@ -1,4 +1,4 @@
-use iso_8859_1_encoder::Iso8859_1;
+use iso_8859_1_encoder::Iso8859String;
 use std::{
     error::Error,
     fmt::{Debug, Display},
@@ -87,7 +87,7 @@ impl Display for PgnByteErr {
 
         let found_text = match self.found {
             None => "EOF".to_string(),
-            Some(byte) => String::from_8859_1(&[byte]),
+            Some(byte) => Iso8859String::from_bytes(vec![byte]).to_string(),
         };
 
         if !self.not_expected.is_empty() {
@@ -207,7 +207,7 @@ impl<'pgn> PgnParser<'pgn> {
                 return Err(PgnErr::InvalidTagName(symbol_string));
             }
 
-            result.push((symbol_string, String::from_8859_1(&value_string[..])));
+            result.push((symbol_string, Iso8859String::from_bytes(value_string).to_string()));
         }
 
         return Ok(result);

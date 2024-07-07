@@ -4,42 +4,8 @@ use std::ops::Index;
 use std::str::Chars;
 use std::{fmt::Debug, iter::Peekable};
 
+use crate::PieceLocations;
 use chess_common::{File, Location, Piece, PieceKind, Player, Rank};
-
-/// A struct that represents a string
-/// of valid FEN data
-pub struct Fen(pub String);
-impl Fen {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl PartialEq<String> for Fen {
-    fn eq(&self, other: &String) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq for Fen {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl PartialEq<str> for Fen {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for Fen {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == **other
-    }
-}
-
-impl Eq for Fen {}
 
 #[derive(Debug)]
 pub struct FenErr {
@@ -76,7 +42,7 @@ impl<'fen> FenParser<'fen> {
             last_index: 0,
         };
 
-        let placement = parser.parse_piece_placement()?;
+        let piece_locations = parser.parse_piece_placement()?;
 
         parser.match_char_or_err(' ')?;
 
@@ -186,7 +152,7 @@ impl<'fen> FenParser<'fen> {
         });
 
         Ok(BoardLayout {
-            placement,
+            piece_locations,
             player_to_move,
             white_can_castle_kingside,
             white_can_castle_queenside,
@@ -198,10 +164,10 @@ impl<'fen> FenParser<'fen> {
         })
     }
 
-    fn parse_piece_placement(&mut self) -> Result<[[Option<Piece>; 8]; 8], FenErr> {
-        let mut result = [[None; 8]; 8];
+    fn parse_piece_placement(&mut self) -> Result<PieceLocations, FenErr> {
+        let mut result = PieceLocations::default();
         let mut num_to_skip = 0;
-        for rank in (0..8).rev() {
+        for rank in (0_u8..8_u8).rev() {
             // It's important that we reset this at every rank to
             // avoid allowing malformed FEN like ppppp8/rkb/...
             if num_to_skip != 0 {
@@ -209,7 +175,7 @@ impl<'fen> FenParser<'fen> {
             }
             num_to_skip = 0;
 
-            for file in 0..8 {
+            for file in 0_u8..8_u8 {
                 if num_to_skip > 0 {
                     num_to_skip -= 1;
                     continue;
@@ -219,44 +185,37 @@ impl<'fen> FenParser<'fen> {
                     self.match_char_or_err('/')?;
                 }
 
+                let location = &Location::new(
+                    File::try_from(file).expect("File to be a valid file"),
+                    Rank::try_from(rank).expect("Rank to be a valid rank"),
+                );
+
                 let matched = self.match_char_if(|ch| {
                     match ch {
-                        'p' => {
-                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Pawn))
-                        }
-                        'P' => {
-                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Pawn))
-                        }
+                        'p' => result[&location] = Some(Piece::new(Player::Black, PieceKind::Pawn)),
+                        'P' => result[&location] = Some(Piece::new(Player::White, PieceKind::Pawn)),
                         'n' => {
-                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Knight))
+                            result[&location] = Some(Piece::new(Player::Black, PieceKind::Knight))
                         }
                         'N' => {
-                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Knight))
+                            result[&location] = Some(Piece::new(Player::White, PieceKind::Knight))
                         }
                         'b' => {
-                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Bishop))
+                            result[&location] = Some(Piece::new(Player::Black, PieceKind::Bishop))
                         }
                         'B' => {
-                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Bishop))
+                            result[&location] = Some(Piece::new(Player::White, PieceKind::Bishop))
                         }
-                        'r' => {
-                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Rook))
-                        }
-                        'R' => {
-                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Rook))
-                        }
+                        'r' => result[&location] = Some(Piece::new(Player::Black, PieceKind::Rook)),
+                        'R' => result[&location] = Some(Piece::new(Player::White, PieceKind::Rook)),
                         'q' => {
-                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::Queen))
+                            result[&location] = Some(Piece::new(Player::Black, PieceKind::Queen))
                         }
                         'Q' => {
-                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::Queen))
+                            result[&location] = Some(Piece::new(Player::White, PieceKind::Queen))
                         }
-                        'k' => {
-                            result[rank][file] = Some(Piece::new(Player::Black, PieceKind::King))
-                        }
-                        'K' => {
-                            result[rank][file] = Some(Piece::new(Player::White, PieceKind::King))
-                        }
+                        'k' => result[&location] = Some(Piece::new(Player::Black, PieceKind::King)),
+                        'K' => result[&location] = Some(Piece::new(Player::White, PieceKind::King)),
                         '1'..='8' => {
                             num_to_skip = ch as u32 - 0x31_u32; // 0x31 is '1'
                         }
@@ -317,7 +276,7 @@ impl<'fen> FenParser<'fen> {
 
 #[derive(Clone, Debug)]
 pub struct BoardLayout {
-    placement: [[Option<Piece>; 8]; 8],
+    piece_locations: PieceLocations,
     player_to_move: Player,
     white_can_castle_kingside: bool,
     white_can_castle_queenside: bool,
@@ -329,6 +288,30 @@ pub struct BoardLayout {
 }
 
 impl BoardLayout {
+    pub const fn new(
+        piece_locations: PieceLocations,
+        player_to_move: Player,
+        white_can_castle_kingside: bool,
+        white_can_castle_queenside: bool,
+        black_can_castle_kingside: bool,
+        black_can_castle_queenside: bool,
+        en_passant_target: Option<Location>,
+        half_moves: u8,
+        full_moves: u8,
+    ) -> Self {
+        Self {
+            piece_locations,
+            player_to_move,
+            white_can_castle_kingside,
+            white_can_castle_queenside,
+            black_can_castle_kingside,
+            black_can_castle_queenside,
+            en_passant: en_passant_target,
+            half_move_counter: half_moves,
+            full_move_counter: full_moves,
+        }
+    }
+
     pub const fn player_to_move(&self) -> Player {
         self.player_to_move
     }
@@ -349,8 +332,8 @@ impl BoardLayout {
         self.black_can_castle_queenside
     }
 
-    pub fn en_passant_target_square(&self) -> Option<Location> {
-        self.en_passant
+    pub fn en_passant_target_square(&self) -> Option<&Location> {
+        self.en_passant.as_ref()
     }
 
     pub const fn half_move_counter(&self) -> u8 {
@@ -360,9 +343,11 @@ impl BoardLayout {
     pub const fn full_move_counter(&self) -> u8 {
         self.full_move_counter
     }
+}
 
-    pub fn to_fen(&self) -> Fen {
-        let mut fen = Vec::new();
+impl ToString for BoardLayout {
+    fn to_string(&self) -> String {
+        let mut fen = Vec::with_capacity(84); // 84 is the maximum length of a FEN string.
         for (i, rank) in Rank::all_ranks_ascending().rev().enumerate() {
             let mut num_empties = 0;
 
@@ -371,7 +356,7 @@ impl BoardLayout {
             }
 
             for file in File::all_files_ascending() {
-                match self[Location::new(file, rank)] {
+                match self[&Location::new(file, rank)] {
                     None => num_empties += 1,
                     Some(piece) => {
                         if num_empties > 0 {
@@ -430,15 +415,15 @@ impl BoardLayout {
             fen.push(ch as u8);
         }
 
-        Fen(unsafe { String::from_utf8_unchecked(fen) })
+        unsafe { String::from_utf8_unchecked(fen) }
     }
 }
 
-impl Index<Location> for BoardLayout {
+impl Index<&Location> for BoardLayout {
     type Output = Option<Piece>;
 
-    fn index(&self, index: Location) -> &Self::Output {
-        &self.placement[index.rank().as_index()][index.file().as_index()]
+    fn index(&self, index: &Location) -> &Self::Output {
+        &self.piece_locations[index]
     }
 }
 
@@ -455,86 +440,86 @@ mod tests {
 
         // Rooks
         assert!(
-            layout[Location::new(File::a, Rank::One)]
+            layout[&Location::new(File::a, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::h, Rank::One)]
+            layout[&Location::new(File::h, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::a, Rank::Eight)]
+            layout[&Location::new(File::a, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::Rook))
         );
         assert!(
-            layout[Location::new(File::h, Rank::Eight)]
+            layout[&Location::new(File::h, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::Rook))
         );
 
         // Knights
         assert!(
-            layout[Location::new(File::b, Rank::One)]
+            layout[&Location::new(File::b, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::g, Rank::One)]
+            layout[&Location::new(File::g, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::b, Rank::Eight)]
+            layout[&Location::new(File::b, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::Knight))
         );
         assert!(
-            layout[Location::new(File::g, Rank::Eight)]
+            layout[&Location::new(File::g, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::Knight))
         );
 
         // Bishops
         assert!(
-            layout[Location::new(File::c, Rank::One)]
+            layout[&Location::new(File::c, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::f, Rank::One)]
+            layout[&Location::new(File::f, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::c, Rank::Eight)]
+            layout[&Location::new(File::c, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::Bishop))
         );
         assert!(
-            layout[Location::new(File::f, Rank::Eight)]
+            layout[&Location::new(File::f, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::Bishop))
         );
 
         // Queens
         assert!(
-            layout[Location::new(File::d, Rank::One)]
+            layout[&Location::new(File::d, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::Queen))
         );
         assert!(
-            layout[Location::new(File::d, Rank::Eight)]
+            layout[&Location::new(File::d, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::Queen))
         );
 
         // Kings
         assert!(
-            layout[Location::new(File::e, Rank::One)]
+            layout[&Location::new(File::e, Rank::One)]
                 == Some(Piece::new(Player::White, PieceKind::King))
         );
         assert!(
-            layout[Location::new(File::e, Rank::Eight)]
+            layout[&Location::new(File::e, Rank::Eight)]
                 == Some(Piece::new(Player::Black, PieceKind::King))
         );
 
         // Pawns
         for file in File::all_files_ascending() {
             assert!(
-                layout[Location::new(file, Rank::Two)]
+                layout[&Location::new(file, Rank::Two)]
                     == Some(Piece::new(Player::White, PieceKind::Pawn))
             );
             assert!(
-                layout[Location::new(file, Rank::Seven)]
+                layout[&Location::new(file, Rank::Seven)]
                     == Some(Piece::new(Player::Black, PieceKind::Pawn))
             );
         }
@@ -542,7 +527,7 @@ mod tests {
         // empties
         for file in File::all_files_ascending() {
             for rank in [Rank::Three, Rank::Four, Rank::Five, Rank::Six] {
-                assert!(layout[Location::new(file, rank)].is_none());
+                assert!(layout[&Location::new(file, rank)].is_none());
             }
         }
 
@@ -555,7 +540,7 @@ mod tests {
         assert!(layout.half_move_counter() == 0);
         assert!(layout.full_move_counter() == 1);
 
-        assert!(layout.to_fen() == input_fen);
+        assert!(layout.to_string() == input_fen);
     }
 
     #[test]
