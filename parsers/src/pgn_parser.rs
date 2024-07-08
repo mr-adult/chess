@@ -1,4 +1,4 @@
-use iso_8859_1_encoder::Iso8859String;
+use iso_8859_1_encoder::{Iso8859String, Iso8859TranscodeErr};
 use std::{
     error::Error,
     fmt::{Debug, Display},
@@ -9,7 +9,7 @@ use std::{
 use crate::acn_parser::{parse_algebraic_notation, PieceMove};
 
 pub struct ParsedGame {
-    pub tag_pairs: Vec<(String, String)>,
+    pub tag_pairs: Vec<(Iso8859String, Iso8859String)>,
     pub moves: Vec<PieceMove>,
     pub result: GameResult,
 }
@@ -20,9 +20,9 @@ impl Debug for ParsedGame {
         result.push_str("\ttag_pairs: [");
         for tag_pair in self.tag_pairs.iter() {
             result.push_str("\n\t\t");
-            result.push_str(&tag_pair.0);
+            result.push_str(&tag_pair.0.to_string());
             result.push_str(": ");
-            result.push_str(&tag_pair.1);
+            result.push_str(&tag_pair.1.to_string());
         }
         if !self.tag_pairs.is_empty() {
             result.push_str("\n\t");
@@ -46,7 +46,106 @@ impl Debug for ParsedGame {
     }
 }
 
-impl ParsedGame {}
+impl ParsedGame {
+    pub fn new(
+        tag_pairs: Vec<(String, String)>,
+        moves: Vec<PieceMove>,
+        result: GameResult,
+    ) -> Option<Self> {
+        // TODO: handle errors in the input
+        let result_tags = tag_pairs
+            .into_iter()
+            .map(|tuple| {
+                let result1: Iso8859String = (&tuple.0).try_into()?;
+                let result2: Iso8859String = (&tuple.1).try_into()?;
+                Ok((result1, result2))
+            })
+            .collect::<Result<Vec<_>, Iso8859TranscodeErr>>();
+
+        let tag_pairs = match result_tags {
+            Err(_) => return None,
+            Ok(tags) => tags,
+        };
+
+        Some(Self {
+            tag_pairs,
+            moves,
+            result,
+        })
+    }
+}
+
+impl Into<Iso8859String> for &ParsedGame {
+    fn into(self) -> Iso8859String {
+        let mut result = Vec::new();
+
+        for (i, tag_pair) in self.tag_pairs.iter().enumerate() {
+            if i != 0 {
+                result.push(b'\n');
+            }
+
+            result.push(b'[');
+            for byte in tag_pair.0.as_bytes() {
+                result.push(*byte);
+            }
+
+            result.push(b' ');
+
+            result.push(b'"');
+            for byte in tag_pair.1.as_bytes() {
+                result.push(*byte);
+            }
+            result.push(b'"');
+
+            result.push(b']');
+        }
+
+        result.push(b'\n');
+        result.push(b'\n');
+
+        let mut moves_iter = self.moves.iter();
+        let mut move_num = 0;
+        loop {
+            let white_move = match moves_iter.next() {
+                None => break,
+                Some(move_) => move_,
+            };
+
+            if move_num != 0 {
+                result.push(b' ');
+            }
+            move_num += 1;
+            for byte in move_num.to_string().as_bytes() {
+                result.push(*byte);
+            }
+            result.push(b'.');
+            result.push(b' ');
+            for byte in white_move.to_string().as_bytes() {
+                result.push(*byte);
+            }
+
+            let black_move = match moves_iter.next() {
+                None => break,
+                Some(move_) => move_,
+            };
+
+            result.push(b' ');
+            for byte in black_move.to_string().as_bytes() {
+                result.push(*byte);
+            }
+        }
+
+        result.push(b' ');
+        for byte in Iso8859String::try_from(self.result.as_ref())
+            .unwrap()
+            .as_bytes()
+        {
+            result.push(*byte);
+        }
+
+        Iso8859String::from_bytes(result)
+    }
+}
 
 #[derive(Debug)]
 pub enum GameResult {
@@ -54,6 +153,17 @@ pub enum GameResult {
     BlackWin,
     Draw,
     Inconclusive,
+}
+
+impl AsRef<str> for GameResult {
+    fn as_ref(&self) -> &str {
+        match self {
+            GameResult::WhiteWin => "1-0",
+            GameResult::BlackWin => "0-1",
+            GameResult::Draw => "1/2-1/2",
+            GameResult::Inconclusive => "*",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -163,6 +273,16 @@ impl<'pgn> PgnParser<'pgn> {
                 break;
             }
 
+            let tag_pairs = tag_pairs
+                .into_iter()
+                .map(|(one, two)| {
+                    (
+                        Iso8859String::try_from(&one).unwrap(),
+                        Iso8859String::try_from(&two).unwrap(),
+                    )
+                })
+                .collect();
+
             games.push(match move_text {
                 None => ParsedGame {
                     tag_pairs,
@@ -207,7 +327,10 @@ impl<'pgn> PgnParser<'pgn> {
                 return Err(PgnErr::InvalidTagName(symbol_string));
             }
 
-            result.push((symbol_string, Iso8859String::from_bytes(value_string).to_string()));
+            result.push((
+                symbol_string,
+                Iso8859String::from_bytes(value_string).to_string(),
+            ));
         }
 
         return Ok(result);

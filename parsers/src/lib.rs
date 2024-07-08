@@ -1,6 +1,6 @@
 mod pgn_parser;
 use pgn_parser::PgnParser;
-pub use pgn_parser::{ParsedGame, PgnErr};
+pub use pgn_parser::{GameResult, ParsedGame, PgnErr};
 mod fen;
 use fen::FenParser;
 pub use fen::{BoardLayout, FenErr, PieceLocations};
