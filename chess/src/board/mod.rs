@@ -1,6 +1,7 @@
 mod acn_move_err;
 use acn_move_err::AcnMoveErr;
 mod move_err;
+use iso_8859_1_encoder::Iso8859String;
 use move_err::MoveErr;
 mod undoable_move;
 use undoable_move::UndoableMove;
@@ -9,7 +10,7 @@ use std::str::FromStr;
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{
-    parse_algebraic_notation, parse_fen, BoardLayout, Check, FenErr, NormalMove, PieceLocations, PieceMove, PieceMoveKind
+    parse_algebraic_notation, parse_fen, BoardLayout, Check, FenErr, GameResult, NormalMove, ParsedGame, PieceLocations, PieceMove, PieceMoveKind
 };
 
 use crate::{
@@ -975,6 +976,11 @@ impl Board {
         let layout: BoardLayout = self.into();
         layout.to_string()
     }
+
+    pub fn to_pgn(&self) -> Iso8859String {
+        let pgn: ParsedGame = self.into();
+        (&pgn).into()
+    }
 }
 
 impl Into<BoardLayout> for Board {
@@ -1016,5 +1022,22 @@ impl Into<PieceLocations> for &Board {
         }
 
         result
+    }
+}
+
+impl Into<ParsedGame> for &Board {
+    fn into(self) -> ParsedGame {
+        let result = if self.is_check_mate() {
+            match self.player_to_move() {
+                Player::White => GameResult::BlackWin,
+                Player::Black => GameResult::WhiteWin,
+            }
+        } else if self.is_stale_mate() {
+            GameResult::Draw
+        } else {
+            GameResult::Inconclusive
+        };
+
+        ParsedGame::new(Vec::new(), self.get_move_history_acn(), result).unwrap()
     }
 }

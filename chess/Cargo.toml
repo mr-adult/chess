@@ -12,6 +12,7 @@ RUST_LOG = "DEBUG"
 
 [dependencies]
 arr_deque = { path = "../arr_deque" }
+iso_8859_1_encoder = { path = "../encoder" }
 chess_common = { path = "../common" }
 chess_parsers = { path = "../parsers" }
 tree_iterators_rs = "1.2.1"
