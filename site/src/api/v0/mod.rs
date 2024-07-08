@@ -6,6 +6,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use chess_common::Player;
 use chess_core::{Board, PossibleMove, SelectedMove};
 use http::StatusCode;
 use serde::Deserialize;
@@ -40,7 +41,7 @@ async fn make_move_handler(req: Json<MakeMovesRequest>) -> Result<Html<String>, 
             }
         }
 
-        if starting_board.to_string() != req.board_fen {
+        if starting_board.to_fen_string() != req.board_fen {
             return Err(StatusCode::BAD_REQUEST);
         }
 

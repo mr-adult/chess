@@ -1,6 +1,7 @@
 use axum::response::Html;
 use chess_common::{File, Location, Player, Rank};
 use chess_core::Board;
+use chess_parsers::PieceLocations;
 use html_to_string_macro::html;
 
 use super::svg::create_option_piece_svg;
@@ -15,12 +16,12 @@ pub(crate) async fn new_game() -> Html<String> {
 }
 
 pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
-    let ergo_board = board.into_ergo_board();
+    let ergo_board: PieceLocations = board.into();
 
     let board_html = Rank::all_ranks_ascending().rev().map(|rank| {
         let row = File::all_files_ascending()
             .map(|file| {
-                let piece = ergo_board[Location::new(file, rank)];
+                let piece = ergo_board[&Location::new(file, rank)];
                 let is_light_square = (rank.as_int() + file.as_int()) % 2 != 0;
                 html!{
                     <span class={
@@ -128,7 +129,7 @@ pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
             <div id="game_board">
                 {board_html}
             </div>
-            <div id="initial_board_fen" style="display: none;">{board.starting_position().to_fen().0}</div>
+            <div id="initial_board_fen" style="display: none;">{board.starting_position().to_string()}</div>
             <div id="game_history">
                 <table border="1" style="padding: 10px; border: 1px solid black; border-collapse: collapse;">
                     <tbody>
@@ -140,7 +141,7 @@ pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
         <div style="text-align: center;">
             <h5 style="margin-bottom: 5px;">"Current Position:"</h5>
             <textarea readonly disabled id="game_fen" style="text-align: center; overflow: hidden; width: 400px; resize: none;">
-                {board.to_string()}
+                {board.to_fen_string()}
             </textarea>
         </div>
     })
