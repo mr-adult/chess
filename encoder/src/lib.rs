@@ -1,8 +1,13 @@
-pub struct  Iso8859String(Vec<u8>);
+#[derive(Debug)]
+pub struct Iso8859String(Vec<u8>);
 
 impl Iso8859String {
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
     }
 
     fn try_from_str(value: &str) -> Result<Self, Iso8859TranscodeErr> {
@@ -55,6 +60,7 @@ impl TryFrom<&String> for Iso8859String {
     }
 }
 
+#[derive(Debug)]
 pub enum Iso8859TranscodeErr {
     /// Returned if a UTF-8 character could not be represented
     /// in ISO 8859 encoding.
