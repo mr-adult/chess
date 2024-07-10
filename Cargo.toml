@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "ai",
     "arr_deque",
     "site",
     "encoder",
