@@ -7,6 +7,11 @@ use streaming_iterator::StreamingIterator;
 use crate::SearchAlgorithm;
 
 pub struct IterativeDeepeningMovesIterator<'board> {
+    /// The phantom data of the board to satisfy Rust's 
+    /// borrowing constraints. There is no way for rust to
+    /// validate that we are using the board correctly, but
+    /// we can guarantee that the board will never be edited
+    /// while we have a reference to it given out.
     board_phantom: PhantomData<&'board Board>,
     /// The actual pointer with lifetime 'board.
     board: *mut Board,
