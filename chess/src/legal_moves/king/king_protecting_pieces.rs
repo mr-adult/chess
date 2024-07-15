@@ -20,7 +20,8 @@ pub(crate) struct KingProtectingLocationsIterator<'board> {
     diagonal_moves: ArrDeque<BishopMovesIterator, 4>,
     straight_moves: ArrDeque<RookMovesIterator, 4>,
     friendly_mailbox: BitBoard,
-    result: ArrDeque<Location, 8>,
+    enemy_mailbox: BitBoard,
+    result: ArrDeque<(Location, ArrDeque<Location, 7>), 8>,
 }
 
 impl<'board> KingProtectingLocationsIterator<'board> {
@@ -52,13 +53,14 @@ impl<'board> KingProtectingLocationsIterator<'board> {
             diagonal_moves: bishop_moves_iters,
             straight_moves: rook_moves_iters,
             friendly_mailbox: board.create_mailbox_for_player(player_to_move),
+            enemy_mailbox: board.create_mailbox_for_player(player_to_move.other_player()),
             result: ArrDeque::new(),
         }
     }
 }
 
 impl<'board> Iterator for KingProtectingLocationsIterator<'board> {
-    type Item = Location;
+    type Item = (Location, ArrDeque<Location, 7>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if !self.result.is_empty() {
@@ -71,6 +73,7 @@ impl<'board> Iterator for KingProtectingLocationsIterator<'board> {
 
         while let Some(bishop_moves_iter) = self.diagonal_moves.pop_front() {
             let mut friendly_square = None;
+            let mut so_far = ArrDeque::<u64, 7>::new();
             for bishop_move in bishop_moves_iter {
                 if bishop_move.intersects_with(&self.friendly_mailbox) {
                     // 2 friendlies means neither is protecting the king by themself
@@ -87,21 +90,36 @@ impl<'board> Iterator for KingProtectingLocationsIterator<'board> {
                         .intersects_with(&bishop_move)
                 {
                     if let Some(friendly) = friendly_square {
-                        assert!(self
-                            .result
-                            .push_back(
-                                Location::try_from(friendly.0)
-                                    .expect(Location::failed_from_usize_message())
-                            )
-                            .is_ok());
+                        let ok = so_far.push_back(bishop_move.0);
+                        debug_assert!(ok.is_ok());
+                        let result = self.result.push_back((
+                            Location::try_from(friendly.0)
+                                .expect(Location::failed_from_usize_message()),
+                            so_far
+                                .into_iter()
+                                .map(|bb| {
+                                    Location::try_from(bb)
+                                        .expect(Location::failed_from_usize_message())
+                                })
+                                .collect(),
+                        ));
+                        debug_assert!(result.is_ok());
                     }
                     break;
                 }
+
+                if self.enemy_mailbox.intersects_with(&bishop_move) {
+                    break;
+                }
+
+                let result = so_far.push_back(bishop_move.0);
+                debug_assert!(result.is_ok());
             }
         }
 
         while let Some(rook_moves_iter) = self.straight_moves.pop_front() {
             let mut friendly_square = None;
+            let mut so_far = ArrDeque::<u64, 7>::new();
             for rook_move in rook_moves_iter {
                 if rook_move.intersects_with(&self.friendly_mailbox) {
                     // 2 friendlies means neither is protecting the king by themself
@@ -118,16 +136,30 @@ impl<'board> Iterator for KingProtectingLocationsIterator<'board> {
                         .intersects_with(&rook_move)
                 {
                     if let Some(friendly) = friendly_square {
+                        let ok = so_far.push_back(rook_move.0);
+                        debug_assert!(ok.is_ok());
                         assert!(self
                             .result
-                            .push_back(
+                            .push_back((
                                 Location::try_from(friendly.0)
-                                    .expect(Location::failed_from_usize_message())
-                            )
+                                    .expect(Location::failed_from_usize_message()),
+                                so_far
+                                    .into_iter()
+                                    .map(|bb| Location::try_from(bb)
+                                        .expect(Location::failed_from_usize_message()))
+                                    .collect()
+                            ))
                             .is_ok());
                         break;
                     }
                 }
+
+                if self.enemy_mailbox.intersects_with(&rook_move) {
+                    break;
+                }
+
+                let result = so_far.push_back(rook_move.0);
+                debug_assert!(result.is_ok());
             }
         }
 

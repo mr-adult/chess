@@ -112,7 +112,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .into_iter()
                     .map(|file| Location::new(file, castle_rank))
                     .map(|loc| loc.as_u64())
-                    .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
+                    .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard));
 
                 let to_loc = Location::new(File::c, castle_rank);
                 if !any_pieces_in_way && !Self::is_check(self.board, self.player, to_loc.as_u64()) {
@@ -133,7 +133,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .into_iter()
                     .map(|file| Location::new(file, castle_rank))
                     .map(|loc| loc.as_u64())
-                    .any(|bitboard| self.friendly_pieces.intersects_with_u64(bitboard));
+                    .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard));
 
                 let to_loc = Location::new(File::g, castle_rank);
 

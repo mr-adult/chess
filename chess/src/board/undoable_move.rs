@@ -2,7 +2,7 @@ use chess_common::{Location, Piece, PieceKind};
 
 use crate::{Move, SelectedMove};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum UndoableMove {
     Promotion {
         move_: Move,

@@ -125,7 +125,7 @@ impl<'board> Iterator for CheckStoppingSquaresIterator<'board> {
         if !self.knight_moves_is_done {
             while let Some(attacking_knight_square) = self.knight_moves.next() {
                 if self.board.knights[Player::other_player_usize(self.player_to_move)]
-                    .intersects_with_u64(self.target_square)
+                    .intersects_with(&attacking_knight_square)
                 {
                     let mut resolution = ArrDeque::<_, 1>::new();
                     assert!(resolution.push_back(attacking_knight_square).is_ok());

@@ -28,7 +28,7 @@ pub struct LegalMovesIterator<'board> {
     king_moves_iterator: LegalKingMovesIterator<'board>,
     king_moves_iterator_finished: bool,
     check_blocking_squares: Option<ArrDeque<Location, 8>>,
-    king_protecting_squares: Option<ArrDeque<Location, 8>>,
+    king_protecting_squares: Option<ArrDeque<(Location, ArrDeque<Location, 7>), 8>>,
 }
 
 impl<'board> LegalMovesIterator<'board> {
@@ -50,16 +50,21 @@ impl<'board> LegalMovesIterator<'board> {
     }
 
     fn get_next_move_that_meets_check_constraints<T: Iterator<Item = Move>>(
-        king_protecting: &ArrDeque<Location, 8>,
+        king_protecting: &ArrDeque<(Location, ArrDeque<Location, 7>), 8>,
         check_blocks: &Option<ArrDeque<Location, 8>>,
         iter: &mut T,
     ) -> Option<Move> {
         while let Some(move_) = Self::get_next_move_that_blocks_check(check_blocks, iter) {
-            if king_protecting
+            match king_protecting
                 .iter()
-                .any(|protecting| move_.from == *protecting)
+                .find(|protecting| move_.from == protecting.0)
             {
-                continue;
+                None => {}
+                Some(protecting) => {
+                    if !protecting.1.iter().any(|loc| move_.to == *loc) {
+                        continue;
+                    }
+                }
             }
             return Some(move_);
         }

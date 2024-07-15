@@ -4,24 +4,25 @@ mod move_err;
 use iso_8859_1_encoder::Iso8859String;
 use move_err::MoveErr;
 mod undoable_move;
+use streaming_iterator::StreamingIterator;
 use undoable_move::UndoableMove;
 
-use std::str::FromStr;
+use std::{os::windows::thread, str::FromStr, sync::Mutex};
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{
-    parse_algebraic_notation, parse_fen, BoardLayout, Check, FenErr, GameResult, NormalMove, ParsedGame, PieceLocations, PieceMove, PieceMoveKind
+    parse_algebraic_notation, parse_fen, BoardLayout, Check, FenErr, GameResult, NormalMove,
+    ParsedGame, PieceLocations, PieceMove, PieceMoveKind,
 };
 
 use crate::{
     bitboard::BitBoard,
-    SelectedMove,
     legal_moves::{LegalKingMovesIterator, LegalMovesIterator},
     possible_moves::PossibleMovesIterator,
-    Move,
+    IterativeDeepeningMovesIterator, Move, SelectedMove,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Board {
     pub(crate) starting_position: BoardLayout,
     pub(crate) pawns: [BitBoard; 2],
@@ -113,8 +114,10 @@ impl Board {
         self.mailbox = BitBoard::new(result);
     }
 
-    #[cfg(debug_assertions)]
     pub(crate) fn assert_board_integrity(&self) {
+        #[cfg(not(debug_assertions))]
+        return;
+
         for (i, bitboard_1) in self.all_bitboards().enumerate() {
             for (j, bitboard_2) in self.all_bitboards().enumerate() {
                 if bitboard_1 as *const BitBoard == bitboard_2 as *const BitBoard {
@@ -240,24 +243,33 @@ impl Board {
 
     /// Gets the number of half-moves played in the current game as defined
     /// by Forsyth–Edwards Notation.
-    fn half_moves_played(&self) -> u8 {
-        self.starting_position.half_move_counter() + self.history.len() as u8
+    pub fn half_moves_played(&self) -> u8 {
+        let total = self.starting_position.half_move_counter() as usize + self.history.len();
+        if total > u8::MAX as usize {
+            return u8::MAX;
+        }
+        return total as u8;
     }
 
     /// Gets the number of full-moves played in the current game as defined
     /// by Forsyth–Edwards Notation.
-    fn full_moves_played(&self) -> u8 {
+    pub fn full_moves_played(&self) -> u8 {
         let history_len_u8 = self.history.len() as u8;
-        match self.starting_position.player_to_move() {
-            Player::White => self.starting_position.full_move_counter() + history_len_u8 / 2,
-            Player::Black => {
-                self.starting_position.full_move_counter() + history_len_u8 / 2 + history_len_u8 % 2
-            }
+        let recorded_full_moves = match self.starting_position.player_to_move() {
+            Player::White => history_len_u8 / 2,
+            Player::Black => history_len_u8 / 2 + history_len_u8 % 2,
+        };
+
+        let total = recorded_full_moves as usize + self.history.len();
+        if total > u8::MAX as usize {
+            return u8::MAX;
+        } else {
+            return total as u8;
         }
     }
 
     /// Gets the current en-passant target square (if there is one).
-    pub(crate) fn en_passant_target_square(&self) -> Option<Location> {
+    pub fn en_passant_target_square(&self) -> Option<Location> {
         // if a move has been made, refer to it.
         if let Some(last_move) = self.history.last() {
             let last_move = last_move.move_();
@@ -527,6 +539,54 @@ impl Board {
 
     pub fn possible_moves<'board>(&'board self) -> PossibleMovesIterator<'board> {
         PossibleMovesIterator::new(self.legal_moves())
+    }
+
+    pub fn iterative_deepening_bfs<'board>(
+        &'board mut self,
+        max_depth: usize,
+    ) -> IterativeDeepeningMovesIterator<'board> {
+        IterativeDeepeningMovesIterator::new(self, max_depth)
+    }
+
+    pub fn perft(&mut self, depth: usize) -> Vec<(PieceMove, usize)> {
+        if depth == 0 {
+            return Vec::with_capacity(0);
+        }
+
+        let possible_moves = self.possible_moves().collect::<Vec<_>>();
+        let mut results = Vec::with_capacity(possible_moves.len());
+        let mut threads = Vec::with_capacity(possible_moves.len());
+
+        for move_ in possible_moves {
+            let mut board = self.clone();
+            board.make_move_unchecked(move_).unwrap();
+            threads.push(std::thread::spawn(move || {
+                let mut iter = board.iterative_deepening_bfs(depth - 1);
+
+                let mut total = 0_usize;
+                let analyzed_move = iter.board().get_move_history_acn().last().unwrap().clone();
+                while let Some(_) = iter.next() {
+                    if iter.current_depth() < depth - 1 {
+                        continue;
+                    }
+
+                    total += 1;
+                }
+
+                if depth == 1 {
+                    total += 1;
+                }
+
+                (analyzed_move, total)
+            }));
+        }
+
+        for handle in threads {
+            results.push(handle.join().unwrap());
+        }
+
+        results.sort_by(|(move_1, _), (move_2, _)| move_1.to_string().cmp(&move_2.to_string()));
+        results
     }
 
     /// Makes a move where the move is passed in in algebraic chess notation
@@ -994,15 +1054,16 @@ impl Into<BoardLayout> for &Board {
         let piece_locations: PieceLocations = self.into();
 
         BoardLayout::new(
-            piece_locations, 
-            self.player_to_move(), 
-            self.white_can_castle_kingside(), 
-            self.white_can_castle_queenside(), 
-            self.black_can_castle_kingside(), 
-            self.black_can_castle_queenside(), 
-            self.en_passant_target_square(), 
-            self.half_moves_played(), 
-            self.full_moves_played())
+            piece_locations,
+            self.player_to_move(),
+            self.white_can_castle_kingside(),
+            self.white_can_castle_queenside(),
+            self.black_can_castle_kingside(),
+            self.black_can_castle_queenside(),
+            self.en_passant_target_square(),
+            self.half_moves_played(),
+            self.full_moves_played(),
+        )
     }
 }
 
