@@ -6,6 +6,7 @@ pub fn parse_algebraic_notation(move_: &str) -> Option<PieceMove> {
     ACNParser::parse(move_)
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct PieceMove {
     /// The type of check this move resulted in
     pub check_kind: Check,
@@ -36,6 +37,7 @@ impl ToString for PieceMove {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub enum PieceMoveKind {
     CastleKingside,
     CastleQueenside,
@@ -58,6 +60,7 @@ impl ToString for PieceMoveKind {
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
 pub struct NormalMove {
     /// The piece being moved
     pub piece_kind: PieceKind,
@@ -113,13 +116,13 @@ impl ToString for NormalMove {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SuffixAnnotation {
     Exclamation,
     Question,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Check {
     None,
     Check,
