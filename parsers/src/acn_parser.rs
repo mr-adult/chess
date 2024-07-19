@@ -144,7 +144,7 @@ impl ACNParser {
                     })
                 }
                 6 => {
-                    let last_char = source.as_bytes()[3];
+                    let last_char = source.as_bytes()[5];
                     let check_kind = match last_char {
                         b'+' => Check::Check,
                         b'#' => Check::Mate,

@@ -383,17 +383,26 @@ impl ToString for BoardLayout {
         fen.push(b' ');
         fen.push(self.player_to_move().as_char() as u8);
         fen.push(b' ');
+
+        let mut any_valid_castles = false;
         if self.white_can_castle_kingside() {
             fen.push(b'K');
+            any_valid_castles = true;
         }
         if self.white_can_castle_queenside() {
             fen.push(b'Q');
+            any_valid_castles = true;
         }
         if self.black_can_castle_kingside() {
             fen.push(b'k');
+            any_valid_castles = true;
         }
         if self.black_can_castle_queenside() {
             fen.push(b'q');
+            any_valid_castles = true;
+        }
+        if !any_valid_castles {
+            fen.push(b'-');
         }
 
         fen.push(b' ');
