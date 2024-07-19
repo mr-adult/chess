@@ -4,7 +4,8 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use html_to_string_macro::html;
+use chess_core::Board;
+use chess_html::render_gameboard_full_page;
 use http::Method;
 use tower_cookies::CookieManagerLayer;
 use tower_http::{
@@ -100,18 +101,5 @@ async fn start_db() -> PgPool {
 }
 
 async fn home(state: State<AppState>) -> Html<String> {
-    Html(html! {
-        <!DOCTYPE html>
-        <head>
-            <title>"Chess"</title>
-            <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-            <meta charset="UTF-8" />
-            <meta name="description" content="A chess website" />
-            <link rel="stylesheet" href="/styles/app.css" />
-            <script src="/scripts/app.js"></script>
-        </head>
-        <body>
-            {chess_html::new_game().await.0}
-        </body>
-    })
+    render_gameboard_full_page(&Board::default())
 }

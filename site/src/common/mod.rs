@@ -1,2 +1,2 @@
-mod fen_request;
-pub(super) use fen_request::FenRequest;
+mod request;
+pub(super) use request::{FenRequest, PerftRequest};

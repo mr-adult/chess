@@ -6,12 +6,22 @@ use html_to_string_macro::html;
 
 use super::svg::create_option_piece_svg;
 
-pub(crate) async fn new_game() -> Html<String> {
-    let raw_board = Board::default();
+pub(crate) fn render_gameboard_full_page(board: &Board) -> Html<String> {
     Html(html! {
-        <div id="game_state_wrapper">
-            {render_gameboard(&raw_board).0}
-        </div>
+        <!DOCTYPE html>
+        <head>
+            <title>"Chess"</title>
+            <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+            <meta charset="UTF-8" />
+            <meta name="description" content="A chess website" />
+            <link rel="stylesheet" href="/styles/app.css" />
+            <script src="/scripts/app.js"></script>
+        </head>
+        <body>
+            <div id="game_state_wrapper">
+                {render_gameboard(&board).0}
+            </div>
+        </body>
     })
 }
 
