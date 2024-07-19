@@ -1,5 +1,6 @@
 use super::move_err::MoveErr;
 
+#[derive(Debug)]
 pub enum AcnMoveErr {
     /// Signifies an error in parsing the algebraic chess notation string.
     Acn,

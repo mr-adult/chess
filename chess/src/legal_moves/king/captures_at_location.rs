@@ -49,11 +49,13 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
         ]
         .into_iter();
 
+        let target_square_location =
+            Location::try_from(target).expect(Location::failed_from_usize_message());
+
         Self {
             board,
             player_to_move: player_to_move.as_index(),
-            target_square_location: Location::try_from(target)
-                .expect(Location::failed_from_usize_message()),
+            target_square_location,
             pawn_moves: match player_to_move {
                 Player::White => [target_bb.down_left(), target_bb.down_right()].into_iter(),
                 Player::Black => [target_bb.up_left(), target_bb.up_right()].into_iter(),

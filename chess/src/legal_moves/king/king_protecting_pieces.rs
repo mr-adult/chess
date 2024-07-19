@@ -57,6 +57,18 @@ impl<'board> KingProtectingLocationsIterator<'board> {
             result: ArrDeque::new(),
         }
     }
+
+    pub(crate) fn new_with_mailbox(
+        board: &'board Board,
+        player_to_move: Player,
+        target: u64,
+        mailbox: u64,
+    ) -> Self {
+        let mut iter = Self::new(board, player_to_move, target);
+        iter.friendly_mailbox.0 &= mailbox;
+        iter.enemy_mailbox.0 &= mailbox;
+        iter
+    }
 }
 
 impl<'board> Iterator for KingProtectingLocationsIterator<'board> {

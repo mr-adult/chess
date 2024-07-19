@@ -16,6 +16,7 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct CheckStoppingSquaresIterator<'board> {
     board: &'board Board,
+    mailbox: BitBoard,
     player_to_move: usize,
     target_square: u64,
     #[allow(unused)]
@@ -52,6 +53,7 @@ impl<'board> CheckStoppingSquaresIterator<'board> {
 
         Self {
             board,
+            mailbox: board.mailbox.clone(),
             player_to_move: player_to_move.as_index(),
             target_square: target,
             #[cfg(debug_assertions)]
@@ -68,6 +70,17 @@ impl<'board> CheckStoppingSquaresIterator<'board> {
             straight_moves: rook_moves_iters,
             result: ArrDeque::new(),
         }
+    }
+
+    pub fn new_with_mailbox(
+        board: &'board Board,
+        player_to_move: Player,
+        target: u64,
+        mailbox: u64,
+    ) -> Self {
+        let mut iter: CheckStoppingSquaresIterator = Self::new(board, player_to_move, target);
+        iter.mailbox = BitBoard::new(mailbox);
+        iter
     }
 
     fn resolve_into_result<const N: usize>(&mut self, values: ArrDeque<BitBoard, N>) -> bool {
@@ -153,7 +166,7 @@ impl<'board> Iterator for CheckStoppingSquaresIterator<'board> {
                     break;
                 }
 
-                if self.board.mailbox.intersects_with(bishop_square) {
+                if self.mailbox.intersects_with(bishop_square) {
                     break;
                 }
             }
@@ -184,7 +197,7 @@ impl<'board> Iterator for CheckStoppingSquaresIterator<'board> {
                     has_attacking_rook = true;
                 }
 
-                if self.board.mailbox.intersects_with(rook_square) {
+                if self.mailbox.intersects_with(rook_square) {
                     break;
                 }
             }

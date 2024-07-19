@@ -7,7 +7,7 @@ mod undoable_move;
 use streaming_iterator::StreamingIterator;
 use undoable_move::UndoableMove;
 
-use std::{os::windows::thread, str::FromStr, sync::Mutex};
+use std::{os::windows::thread, str::FromStr};
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{
@@ -176,69 +176,73 @@ impl Board {
     /// Gets whether or not the specified player can castle kingside.
     pub(crate) fn player_can_castle_kingside(&self, player: &Player) -> bool {
         match player {
-            Player::Black => self.black_can_castle_kingside(),
-            Player::White => self.white_can_castle_kingside(),
+            Player::White => {
+                if !self.starting_position.white_can_castle_kingside() {
+                    return false;
+                }
+            }
+            Player::Black => {
+                if !self.starting_position.black_can_castle_kingside() {
+                    return false;
+                }
+            }
         }
+
+        return !self
+            .history
+            .iter()
+            .map(|undoable_move| undoable_move.move_())
+            .flat_map(|move_| [&move_.from, &move_.to])
+            .any(|loc| {
+                *loc == Location::king_starting(player)
+                    || *loc == Location::new(File::h, Rank::castle(player))
+            });
     }
 
     /// Gets whether or not white can castle kingside.
     fn white_can_castle_kingside(&self) -> bool {
-        if !self.starting_position.white_can_castle_kingside() {
-            return false;
-        }
-
-        return !self.history.iter().any(|undoable_move| {
-            let move_ = undoable_move.move_();
-            move_.from == Location::king_starting(&Player::White)
-                || move_.from == Location::new(File::h, Rank::castle(&Player::White))
-        });
+        self.player_can_castle_kingside(&Player::White)
     }
 
     /// Gets whether or not black can castle kingside.
     fn black_can_castle_kingside(&self) -> bool {
-        if !self.starting_position.black_can_castle_kingside() {
-            return false;
-        }
-
-        return !self.history.iter().any(|undoable_move| {
-            let move_from = &undoable_move.move_().from;
-            *move_from == Location::king_starting(&Player::Black)
-                || *move_from == Location::new(File::h, Rank::castle(&Player::Black))
-        });
+        self.player_can_castle_kingside(&Player::Black)
     }
 
     /// Gets whether or not the specified player can castle queenside.
     pub(crate) fn player_can_castle_queenside(&self, player: &Player) -> bool {
         match player {
-            Player::Black => self.black_can_castle_queenside(),
-            Player::White => self.white_can_castle_queenside(),
+            Player::White => {
+                if !self.starting_position.white_can_castle_queenside() {
+                    return false;
+                }
+            }
+            Player::Black => {
+                if !self.starting_position.black_can_castle_queenside() {
+                    return false;
+                }
+            }
         }
+
+        return !self
+            .history
+            .iter()
+            .map(|undoable_move| undoable_move.move_())
+            .flat_map(|move_| [&move_.from, &move_.to])
+            .any(|loc| {
+                *loc == Location::king_starting(player)
+                    || *loc == Location::new(File::a, Rank::castle(player))
+            });
     }
 
     /// Gets whether or not white can castle queenside.
     fn white_can_castle_queenside(&self) -> bool {
-        if !self.starting_position.white_can_castle_queenside() {
-            return false;
-        }
-
-        return !self.history.iter().any(|undoable_move| {
-            let move_ = undoable_move.move_();
-            move_.from == Location::new(File::e, Rank::One)
-                || move_.from == Location::new(File::a, Rank::One)
-        });
+        self.player_can_castle_queenside(&Player::White)
     }
 
     /// Gets whether or not black can castle queenside.
     fn black_can_castle_queenside(&self) -> bool {
-        if !self.starting_position.black_can_castle_queenside() {
-            return false;
-        }
-
-        return !self.history.iter().any(|undoable_move| {
-            let move_ = undoable_move.move_();
-            move_.from == Location::new(File::e, Rank::Eight)
-                || move_.from == Location::new(File::a, Rank::Eight)
-        });
+        self.player_can_castle_queenside(&Player::Black)
     }
 
     /// Gets the number of half-moves played in the current game as defined
@@ -965,7 +969,20 @@ impl Board {
                 let piece_to_undo = self.at(&last_move.move_().to).expect(
                     "BOARD INTEGRITY: no piece found at 'to' location of move on top of undo stack",
                 );
-                assert!(player_to_undo == piece_to_undo.player(), "BOARD INTEGRITY: player to move and piece that is on top of undo stack mismatch");
+
+                if player_to_undo != piece_to_undo.player() {
+                    let selected: SelectedMove = (&last_move).into();
+                    self.make_move(selected).unwrap();
+                    let move_acn = self
+                        .get_move_history_acn()
+                        .into_iter()
+                        .map(|move_| move_.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+
+                    self.undo().ok();
+                    panic!("BOARD INTEGRITY: player to move and piece that is on top of undo stack mismatch. Move history: {}", move_acn);
+                }
 
                 match &last_move {
                     UndoableMove::EnPassant {

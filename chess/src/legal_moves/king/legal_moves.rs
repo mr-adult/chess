@@ -114,8 +114,16 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .map(|loc| loc.as_u64())
                     .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard));
 
+                let any_checks_in_way = [File::c, File::d]
+                    .into_iter()
+                    .map(|file| Location::new(file, castle_rank))
+                    .any(|loc| Self::is_check(&self.board, self.player, loc.as_u64()));
+
                 let to_loc = Location::new(File::c, castle_rank);
-                if !any_pieces_in_way && !Self::is_check(self.board, self.player, to_loc.as_u64()) {
+                if !any_pieces_in_way
+                    && !any_checks_in_way
+                    && !Self::is_check(self.board, self.player, to_loc.as_u64())
+                {
                     return Some(Move {
                         from: Location::try_from(self.king_bitboard.0)
                             .expect(Location::failed_from_usize_message()),
@@ -135,9 +143,17 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     .map(|loc| loc.as_u64())
                     .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard));
 
+                let any_checks_in_way = [File::f, File::g]
+                    .into_iter()
+                    .map(|file| Location::new(file, castle_rank))
+                    .any(|loc| Self::is_check(&self.board, self.player, loc.as_u64()));
+
                 let to_loc = Location::new(File::g, castle_rank);
 
-                if !any_pieces_in_way && !Self::is_check(self.board, self.player, to_loc.as_u64()) {
+                if !any_pieces_in_way
+                    && !any_checks_in_way
+                    && !Self::is_check(self.board, self.player, to_loc.as_u64())
+                {
                     return Some(Move {
                         from: Location::try_from(self.king_bitboard.0)
                             .expect(Location::failed_from_usize_message()),

@@ -1,7 +1,7 @@
 use arr_deque::ArrDeque;
-use chess_common::{Location, Player, Rank};
+use chess_common::{black, white, Location, Player, Rank};
 
-use crate::{moves::PossibleMove, Board, Move};
+use crate::{bitboard::BitBoard, moves::PossibleMove, Board, Move};
 mod bishop;
 mod king;
 mod knight;
@@ -108,6 +108,10 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
     /// defending an opposing check, calculate their legal
     /// moves.
     fn next(&mut self) -> Option<Self::Item> {
+        if self.board.kings[white!()].0 == 0 || self.board.kings[black!()].0 == 0 {
+            return None;
+        }
+
         if !self.king_moves_iterator_finished {
             let next_king_move = self.king_moves_iterator.next();
             match next_king_move {
@@ -145,22 +149,91 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         if let Some(pawn_moves) = &mut self.pawn_moves_iterator {
-            let move_to_consider = Self::get_next_move_that_meets_check_constraints(
-                &self.king_protecting_squares.as_ref().unwrap(),
-                &self.check_blocking_squares,
-                pawn_moves,
-            );
+            let en_passant_target_square = self.board.en_passant_target_square();
+            let en_passant_target_pawn = en_passant_target_square
+                .clone()
+                .and_then(|loc| Some(BitBoard::new(loc.as_u64())))
+                .and_then(|bitboard| {
+                    Some(match self.player {
+                        Player::White => bitboard.down(),
+                        Player::Black => bitboard.up(),
+                    })
+                });
 
-            match move_to_consider {
-                None => self.pawn_moves_iterator = None,
-                Some(move_) => {
-                    if move_.to.rank() == Rank::One || move_.to.rank() == Rank::Eight {
-                        return Some(PossibleMove::Promotion { move_ });
+            let alternate_check_blocks = if en_passant_target_square.is_some() {
+                if self.check_blocking_squares
+                    .iter()
+                    .flat_map(|opt| opt)
+                    .any(|square| square.as_u64() == en_passant_target_pawn.as_ref().expect("there to be an en passant pawn if there is an en passant square").0) {
+                        Some(CheckStoppingSquaresIterator::new_with_mailbox(
+                            &self.board, 
+                            self.player,
+                            self.board.kings[self.player.as_index()].0, 
+                            self.board.mailbox.0 ^ en_passant_target_pawn.as_ref().unwrap().0)
+                            .map(|loc| {
+                                if loc.as_u64() == en_passant_target_pawn.as_ref().unwrap().0 {
+                                    match self.player {
+                                        Player::White => {
+                                            Location::try_from(en_passant_target_pawn.clone().unwrap().up().0).expect(Location::failed_from_usize_message())
+                                        }
+                                        Player::Black => {
+                                            Location::try_from(en_passant_target_pawn.clone().unwrap().down().0).expect(Location::failed_from_usize_message())
+                                        }
+                                    }
+                                } else {
+                                    loc
+                                }
+                            }).collect::<ArrDeque<_, 8>>())
                     } else {
-                        return Some(PossibleMove::Normal { move_ });
+                        None
+                    }
+            } else {
+                None
+            };
+
+            let tmp;
+            let check_blocks_to_use = if let Some(check_blocks) = alternate_check_blocks {
+                tmp = Some(check_blocks);
+                &tmp
+            } else {
+                &self.check_blocking_squares
+            };
+
+            while let Some(move_to_consider) = Self::get_next_move_that_meets_check_constraints(
+                &self.king_protecting_squares.as_ref().unwrap(),
+                check_blocks_to_use,
+                pawn_moves,
+            ) {
+                if let Some(en_passant) = &en_passant_target_square {
+                    if move_to_consider.to == *en_passant {
+                        let en_passant_pawn = en_passant_target_pawn.clone().expect("if we had an en passant target square, we should have an en passant target pawn.");
+                        if KingProtectingLocationsIterator::new_with_mailbox(
+                            &self.board,
+                            self.player,
+                            self.board.kings[self.player.as_index()].0,
+                            self.board.mailbox.0 ^ en_passant_pawn.0,
+                        )
+                        .any(|loc| loc.0 == move_to_consider.from)
+                        {
+                            continue;
+                        }
                     }
                 }
+
+                if move_to_consider.to.rank() == Rank::One
+                    || move_to_consider.to.rank() == Rank::Eight
+                {
+                    return Some(PossibleMove::Promotion {
+                        move_: move_to_consider,
+                    });
+                } else {
+                    return Some(PossibleMove::Normal {
+                        move_: move_to_consider,
+                    });
+                }
             }
+
+            self.pawn_moves_iterator = None;
         }
 
         if let Some(knight_moves) = &mut self.knight_moves_iterator {

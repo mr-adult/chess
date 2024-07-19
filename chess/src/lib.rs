@@ -6,7 +6,7 @@ mod moves;
 mod possible_moves;
 
 pub use board::Board;
+pub use iterative_deepening::IterativeDeepeningMovesIterator;
 pub use legal_moves::LegalMovesIterator;
 pub use moves::{Move, PossibleMove, SelectedMove};
 pub use possible_moves::PossibleMovesIterator;
-pub use iterative_deepening::IterativeDeepeningMovesIterator;
