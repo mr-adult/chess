@@ -98,7 +98,13 @@ struct MakeMovesRequest {
 
 async fn perft_handler(req: Query<PerftRequest>) -> Result<Json<Vec<(String, usize)>>, StatusCode> {
     let mut board = Board::from_str(&req.board_fen).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let perft_result = board.perft(req.depth);
+    let perft_result = board.perft(
+        req.depth,
+        std::thread::available_parallelism()
+            .ok()
+            .and_then(|non_zero| Some(non_zero.get()))
+            .unwrap_or(1),
+    );
     let mut total = 0;
     let result = perft_result.into_iter().map(|tuple| {
         total += tuple.1;

@@ -29,7 +29,13 @@ pub(crate) async fn render_board_handler(
 
 async fn perft_handler(req: Query<PerftRequest>) -> Result<Html<String>, StatusCode> {
     let mut board = Board::from_str(&req.0.board_fen).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let perft = board.perft(req.0.depth);
+    let perft = board.perft(
+        req.0.depth,
+        std::thread::available_parallelism()
+            .ok()
+            .and_then(|non_zero| Some(non_zero.get()))
+            .unwrap_or(1),
+    );
 
     #[cfg(debug_assertions)]
     let moves_raw = perft
