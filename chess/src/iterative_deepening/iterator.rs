@@ -136,148 +136,18 @@ unsafe impl<'board> Send for IterativeDeepeningMovesIterator<'board> {}
 
 impl<'board> Drop for IterativeDeepeningMovesIterator<'board> {
     fn drop(&mut self) {
-        if !self.top_iter_made_move {
-            self.moves_iter_stack.pop();
-        }
-
-        while let Some(_) = self.moves_iter_stack.pop() {
-            unsafe { &mut *self.board }.undo().ok();
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        collections::HashMap,
-        io::{stdout, Write},
-    };
-
-    use crate::Board;
-    use streaming_iterator::StreamingIterator;
-
-    use super::IterativeDeepeningMovesIterator;
-
-    use whitespacesv::{ColumnAlignment, WSVWriter};
-
-    #[test]
-    fn starting_position_perft() {
-        let values: Vec<usize> = vec![
-            1,
-            20,
-            400,
-            8_902,
-            197_281,
-            4_865_609,
-            119_060_324,
-            3_195_901_860,
-            84_998_978_956,
-            2_439_530_234_167,
-            69_352_859_712_417,
-        ];
-
-        let mut board = Board::default();
-        const depth: u8 = 4;
-        let perft_nodes = perft_nodes(&mut board, depth);
-        let mut final_printout = String::new();
-
-        for (i, depth_map) in perft_nodes.into_iter().enumerate() {
-            let mut final_touch = String::new();
-            let mut sorted_depth_map = depth_map.into_iter().collect::<Vec<_>>();
-            sorted_depth_map.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
-
-            if i == depth as usize - 1 {
-                let mut condensed = HashMap::new();
-                for (k, v) in sorted_depth_map.iter() {
-                    let key = k.split(" ").next().unwrap();
-                    if let Some(val) = condensed.get_mut(key) {
-                        *val += *v;
-                    } else {
-                        condensed.insert(key, *v);
-                    }
-                }
-
-                let mut condensed_sorted = condensed.into_iter().collect::<Vec<_>>();
-                condensed_sorted.sort_by(|&(k1, _), &(k2, _)| k1.cmp(k2));
-
-                final_touch.push_str(&format!("Condensed results at depth: {}:\n", i + 1));
-                let wsv = WSVWriter::new(
-                    condensed_sorted
-                        .into_iter()
-                        .map(|(k, v)| [Some(k.to_string()), Some(v.to_string())]),
-                )
-                .align_columns(ColumnAlignment::Left)
-                .to_string();
-
-                final_touch.push('\n');
-                final_touch.push_str(&wsv);
-                final_touch.push('\n');
-            }
-
-            final_printout.push_str(&format!("Results at depth: {}:\n", i + 1));
-            let mut total = 0;
-            let wsv = WSVWriter::new(sorted_depth_map.into_iter().map(|(k, v)| {
-                total += v;
-                [Some(k), Some(v.to_string())]
-            }))
-            .align_columns(ColumnAlignment::Left)
-            .to_string();
-
-            final_printout.push_str(&wsv);
-            final_printout.push('\n');
-
-            if final_touch.len() > 0 {
-                final_printout.push_str(&final_touch);
-            }
-
-            final_printout.push_str(&format!("\nTotal: {}\n", total));
-            final_printout.push_str("\n\n");
-        }
-
-        let mut stdout = stdout().lock();
-        stdout.write_all(final_printout.as_bytes()).ok();
-        stdout.flush().ok();
-    }
-
-    fn perft_nodes(board: &mut Board, depth: u8) -> Vec<HashMap<String, usize>> {
-        let mut maps = Vec::with_capacity(depth as usize - 1);
-        for _ in 0..depth {
-            maps.push(HashMap::new());
-        }
-        let mut stream = IterativeDeepeningMovesIterator::new(board, depth as usize);
-        let mut len = 0;
-        while let Some(board) = stream.next() {
-            let half_moves = board.half_moves_played() as usize;
-            let map = maps.get_mut(half_moves - 1).unwrap();
-
-            let acn = board.get_move_history_acn();
-            let acn_minus_1 = &acn[0..acn.len() - 1];
-            let acn_str = acn_minus_1
-                .into_iter()
-                .map(|acn| acn.to_string())
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            if let Some(value) = map.get_mut(&acn_str) {
-                *value += 1;
+        let num_moves_made = if !self.top_iter_made_move {
+            if self.moves_iter_stack.len() == 0 {
+                0
             } else {
-                map.insert(acn_str, 1);
+                self.moves_iter_stack.len() - 1
             }
+        } else {
+            self.moves_iter_stack.len()
+        };
 
-            if board.half_moves_played() != depth {
-                continue;
-            }
-
-            len += 1;
+        for _ in 0..num_moves_made {
+            unsafe { &mut *self.board }.undo().unwrap();
         }
-
-        assert!(
-            len == maps
-                .get_mut(depth as usize - 1)
-                .unwrap()
-                .values()
-                .fold(0, |agg, val| { agg + val })
-        );
-        maps
     }
 }

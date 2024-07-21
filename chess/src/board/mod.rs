@@ -7,7 +7,12 @@ mod undoable_move;
 use streaming_iterator::StreamingIterator;
 use undoable_move::UndoableMove;
 
-use std::{os::windows::thread, str::FromStr};
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+    thread::available_parallelism,
+    vec::IntoIter,
+};
 
 use chess_common::{black, white, File, Location, Piece, PieceKind, Player, Rank};
 use chess_parsers::{
@@ -552,20 +557,54 @@ impl Board {
         IterativeDeepeningMovesIterator::new(self, max_depth)
     }
 
-    pub fn perft(&mut self, depth: usize) -> Vec<(PieceMove, usize)> {
+    /// Runs a perft test for this board.
+    /// * `depth` - The depth to search.
+    /// * `max_dop` - The maximum degrees of parallelism.
+    /// If 0 or 1, this will run single-threaded.
+    /// If this value is greater than the available degrees of parallelism,
+    /// it will be ignored and the available degrees of parallelism will
+    /// be used instead.
+    pub fn perft(&mut self, depth: usize, max_dop: usize) -> Vec<(PieceMove, usize)> {
         if depth == 0 {
             return Vec::with_capacity(0);
         }
 
         let possible_moves = self.possible_moves().collect::<Vec<_>>();
         let mut results = Vec::with_capacity(possible_moves.len());
-        let mut threads = Vec::with_capacity(possible_moves.len());
 
-        for move_ in possible_moves {
-            let mut board = self.clone();
-            board.make_move_unchecked(move_).unwrap();
-            threads.push(std::thread::spawn(move || {
-                let mut iter = board.iterative_deepening_bfs(depth - 1);
+        let mut dop = max_dop;
+        if dop < 1 {
+            dop = 1;
+        }
+
+        match available_parallelism() {
+            Err(_) => { /* couldn't get the available parallelism, so just use the input value */ }
+            Ok(available_parallel) => {
+                let available_parallel = available_parallel.get();
+                if dop > available_parallel {
+                    dop = available_parallel;
+                }
+            }
+        }
+
+        let mut threads = Vec::with_capacity(dop);
+        let work_queue = Arc::new(Mutex::new(possible_moves.into_iter()));
+
+        let task = move |mut board: Board,
+                         mut next: Option<SelectedMove>,
+                         queue: Arc<Mutex<IntoIter<SelectedMove>>>| {
+            let mut results = Vec::new();
+            let mut had_previous_move = false;
+
+            while let Some(move_) = next {
+                if had_previous_move {
+                    board.undo().unwrap();
+                }
+
+                board.make_move_unchecked(move_).unwrap();
+                had_previous_move = true;
+                let mut iter: IterativeDeepeningMovesIterator =
+                    board.iterative_deepening_bfs(depth - 1);
 
                 let mut total = 0_usize;
                 let analyzed_move = iter.board().get_move_history_acn().last().unwrap().clone();
@@ -581,12 +620,46 @@ impl Board {
                     total += 1;
                 }
 
-                (analyzed_move, total)
-            }));
+                results.push((analyzed_move, total));
+
+                let mut lock = queue.lock().unwrap();
+                next = lock.next();
+                drop(lock);
+            }
+            results
+        };
+
+        // if we had >1 degree of parallelism, kick off the other threads.
+        for _ in 0..dop - 1 {
+            let board: Board = self.clone();
+            let queue = work_queue.clone();
+
+            let mut lock = queue.lock().unwrap();
+            let next = lock.next();
+            drop(lock);
+
+            if next.is_some() {
+                threads.push(std::thread::spawn(move || task(board, next, queue)));
+            } else {
+                break;
+            }
+        }
+
+        let mut lock = work_queue.lock().unwrap();
+        let start = lock.next();
+        drop(lock);
+
+        if start.is_some() {
+            // start working through the queue on the main thread.
+            for item in task(self.clone(), start, work_queue) {
+                results.push(item);
+            }
         }
 
         for handle in threads {
-            results.push(handle.join().unwrap());
+            for item in handle.join().unwrap() {
+                results.push(item);
+            }
         }
 
         results.sort_by(|(move_1, _), (move_2, _)| move_1.to_string().cmp(&move_2.to_string()));
@@ -1117,5 +1190,884 @@ impl Into<ParsedGame> for &Board {
         };
 
         ParsedGame::new(Vec::new(), self.get_move_history_acn(), result).unwrap()
+    }
+}
+
+pub mod perft_tests {
+    use std::{collections::HashSet, io::Write, str::FromStr};
+
+    use chess_common::{File, Location, PieceKind, Rank};
+    use chess_parsers::PieceMove;
+
+    use crate::{Board, Move, SelectedMove};
+
+    #[allow(unused)]
+    pub fn run_all() {
+        // these all run single-threaded, so kick off threads for each.
+        let mut threads = Vec::new();
+        threads.push(std::thread::spawn(|| {
+            starting_position_1();
+            write_to_stdout("Starting position depth 1 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            starting_position_2();
+            write_to_stdout("Starting position depth 2 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            starting_position_3();
+            write_to_stdout("Starting position depth 3 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            starting_position_4();
+            write_to_stdout("Starting position depth 4 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            starting_position_5();
+            write_to_stdout("Starting position depth 5 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            kiwipete_1();
+            write_to_stdout("Kiwipete depth 1 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            kiwipete_2();
+            write_to_stdout("Kiwipete depth 2 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            kiwipete_3();
+            write_to_stdout("Kiwipete depth 3 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            position3_1();
+            write_to_stdout("Position 3 depth 1 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            position3_2();
+            write_to_stdout("Position 3 depth 2 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            position3_3();
+            write_to_stdout("Position 3 depth 3 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            position3_4();
+            write_to_stdout("Position 3 depth 4 passed.");
+        }));
+        threads.push(std::thread::spawn(|| {
+            position3_5();
+            write_to_stdout("Position 3 depth 5 passed.");
+        }));
+        for thread in threads {
+            thread.join().unwrap();
+        }
+
+        // Everything past this runs in parallel, so run them one at a time.
+        starting_position_6();
+        write_to_stdout("Starting position depth 6 passed.");
+        starting_position_7();
+        write_to_stdout("Starting position depth 7 passed.");
+
+        // Everything past this runs in parallel, so run them one at a time.
+        kiwipete_4();
+        write_to_stdout("Kiwipete depth 4 passed.");
+        kiwipete_5();
+        write_to_stdout("Kiwipete depth 5 passed.");
+
+        // Everything past this runs in parallel, so run them one at a time.
+        position3_6();
+        write_to_stdout("Position 3 depth 6 passed.");
+    }
+
+    fn write_to_stdout(str: &str) {
+        let mut stdout = std::io::stdout().lock();
+        stdout.write(str.as_bytes()).unwrap();
+        stdout.write(&[b'\n']).unwrap();
+        stdout.flush().unwrap();
+    }
+
+    #[test]
+    fn starting_position_1_test() {
+        starting_position_1();
+    }
+
+    fn starting_position_1() {
+        let mut board = Board::default();
+
+        let expected_1 = parse_move_list(vec![
+            ("a2a3", 1),
+            ("b2b3", 1),
+            ("c2c3", 1),
+            ("d2d3", 1),
+            ("e2e3", 1),
+            ("f2f3", 1),
+            ("g2g3", 1),
+            ("h2h3", 1),
+            ("a2a4", 1),
+            ("b2b4", 1),
+            ("c2c4", 1),
+            ("d2d4", 1),
+            ("e2e4", 1),
+            ("f2f4", 1),
+            ("g2g4", 1),
+            ("h2h4", 1),
+            ("b1a3", 1),
+            ("b1c3", 1),
+            ("g1f3", 1),
+            ("g1h3", 1),
+        ]);
+
+        let perft = board.perft(1, 1);
+        assert_perft_equality(&mut board, expected_1, perft);
+    }
+
+    #[test]
+    fn starting_position_2_test() {
+        starting_position_2();
+    }
+
+    fn starting_position_2() {
+        let mut board = Board::default();
+
+        let expected_2 = parse_move_list(vec![
+            ("a2a3", 20),
+            ("b2b3", 20),
+            ("c2c3", 20),
+            ("d2d3", 20),
+            ("e2e3", 20),
+            ("f2f3", 20),
+            ("g2g3", 20),
+            ("h2h3", 20),
+            ("a2a4", 20),
+            ("b2b4", 20),
+            ("c2c4", 20),
+            ("d2d4", 20),
+            ("e2e4", 20),
+            ("f2f4", 20),
+            ("g2g4", 20),
+            ("h2h4", 20),
+            ("b1a3", 20),
+            ("b1c3", 20),
+            ("g1f3", 20),
+            ("g1h3", 20),
+        ]);
+        let perft = board.perft(2, 1);
+        assert_perft_equality(&mut board, expected_2, perft);
+    }
+
+    #[test]
+    fn starting_position_3_test() {
+        starting_position_3();
+    }
+
+    fn starting_position_3() {
+        let mut board = Board::default();
+        let expected_3 = parse_move_list(vec![
+            ("a2a3", 380),
+            ("b2b3", 420),
+            ("c2c3", 420),
+            ("d2d3", 539),
+            ("e2e3", 599),
+            ("f2f3", 380),
+            ("g2g3", 420),
+            ("h2h3", 380),
+            ("a2a4", 420),
+            ("b2b4", 421),
+            ("c2c4", 441),
+            ("d2d4", 560),
+            ("e2e4", 600),
+            ("f2f4", 401),
+            ("g2g4", 421),
+            ("h2h4", 420),
+            ("b1a3", 400),
+            ("b1c3", 440),
+            ("g1f3", 440),
+            ("g1h3", 400),
+        ]);
+        let perft = board.perft(3, 1);
+        assert_perft_equality(&mut board, expected_3, perft);
+    }
+
+    #[test]
+    fn starting_position_4_test() {
+        starting_position_4();
+    }
+
+    fn starting_position_4() {
+        let mut board = Board::default();
+        let expected = parse_move_list(vec![
+            ("a2a3", 8457),
+            ("b2b3", 9345),
+            ("c2c3", 9272),
+            ("d2d3", 11959),
+            ("e2e3", 13134),
+            ("f2f3", 8457),
+            ("g2g3", 9345),
+            ("h2h3", 8457),
+            ("a2a4", 9329),
+            ("b2b4", 9332),
+            ("c2c4", 9744),
+            ("d2d4", 12435),
+            ("e2e4", 13160),
+            ("f2f4", 8929),
+            ("g2g4", 9328),
+            ("h2h4", 9329),
+            ("b1a3", 8885),
+            ("b1c3", 9755),
+            ("g1f3", 9748),
+            ("g1h3", 8881),
+        ]);
+        let actual = board.perft(4, 1);
+        assert_perft_equality(&mut board, expected, actual)
+    }
+
+    #[test]
+    fn starting_position_5_test() {
+        starting_position_5();
+    }
+
+    fn starting_position_5() {
+        let mut board = Board::default();
+        let expected = parse_move_list(vec![
+            ("a2a3", 181046),
+            ("b2b3", 215255),
+            ("c2c3", 222861),
+            ("d2d3", 328511),
+            ("e2e3", 402988),
+            ("f2f3", 178889),
+            ("g2g3", 217210),
+            ("h2h3", 181044),
+            ("a2a4", 217832),
+            ("b2b4", 216145),
+            ("c2c4", 240082),
+            ("d2d4", 361790),
+            ("e2e4", 405385),
+            ("f2f4", 198473),
+            ("g2g4", 214048),
+            ("h2h4", 218829),
+            ("b1a3", 198572),
+            ("b1c3", 234656),
+            ("g1f3", 233491),
+            ("g1h3", 198502),
+        ]);
+        let actual = board.perft(5, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    // Not using this as a test for performance reasons
+    fn starting_position_6() {
+        let mut board = Board::default();
+        let expected = parse_move_list(vec![
+            ("a2a3", 4463267),
+            ("b2b3", 5310358),
+            ("c2c3", 5417640),
+            ("d2d3", 8073082),
+            ("e2e3", 9726018),
+            ("f2f3", 4404141),
+            ("g2g3", 5346260),
+            ("h2h3", 4463070),
+            ("a2a4", 5363555),
+            ("b2b4", 5293555),
+            ("c2c4", 5866666),
+            ("d2d4", 8879566),
+            ("e2e4", 9771632),
+            ("f2f4", 4890429),
+            ("g2g4", 5239875),
+            ("h2h4", 5385554),
+            ("b1a3", 4856835),
+            ("b1c3", 5708064),
+            ("g1f3", 5723523),
+            ("g1h3", 4877234),
+        ]);
+        let actual = board.perft(
+            6,
+            std::thread::available_parallelism()
+                .and_then(|available| Ok(available.get()))
+                .unwrap_or(4),
+        );
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    fn starting_position_7() {
+        let mut board = Board::default();
+        let expected = parse_move_list(vec![
+            ("a2a3", 106743106),
+            ("b2b3", 133233975),
+            ("c2c3", 144074944),
+            ("d2d3", 227598692),
+            ("e2e3", 306138410),
+            ("f2f3", 102021008),
+            ("g2g3", 135987651),
+            ("h2h3", 106678423),
+            ("a2a4", 137077337),
+            ("b2b4", 134087476),
+            ("c2c4", 157756443),
+            ("d2d4", 269605599),
+            ("e2e4", 309478263),
+            ("f2f4", 119614841),
+            ("g2g4", 130293018),
+            ("h2h4", 138495290),
+            ("b1a3", 120142144),
+            ("b1c3", 148527161),
+            ("g1f3", 147678554),
+            ("g1h3", 120669525),
+        ]);
+        let actual = board.perft(
+            7,
+            std::thread::available_parallelism()
+                .and_then(|available| Ok(available.get()))
+                .unwrap_or(4),
+        );
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    const KIWIPETE_FEN: &'static str =
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0";
+
+    #[test]
+    fn kiwipete_1_test() {
+        kiwipete_1();
+    }
+
+    fn kiwipete_1() {
+        let mut board = Board::from_str(KIWIPETE_FEN).unwrap();
+
+        let expected = parse_move_list(vec![
+            ("a2a3", 1),
+            ("b2b3", 1),
+            ("g2g3", 1),
+            ("d5d6", 1),
+            ("a2a4", 1),
+            ("g2g4", 1),
+            ("g2h3", 1),
+            ("d5e6", 1),
+            ("c3b1", 1),
+            ("c3d1", 1),
+            ("c3a4", 1),
+            ("c3b5", 1),
+            ("e5d3", 1),
+            ("e5c4", 1),
+            ("e5g4", 1),
+            ("e5c6", 1),
+            ("e5g6", 1),
+            ("e5d7", 1),
+            ("e5f7", 1),
+            ("d2c1", 1),
+            ("d2e3", 1),
+            ("d2f4", 1),
+            ("d2g5", 1),
+            ("d2h6", 1),
+            ("e2d1", 1),
+            ("e2f1", 1),
+            ("e2d3", 1),
+            ("e2c4", 1),
+            ("e2b5", 1),
+            ("e2a6", 1),
+            ("a1b1", 1),
+            ("a1c1", 1),
+            ("a1d1", 1),
+            ("h1f1", 1),
+            ("h1g1", 1),
+            ("f3d3", 1),
+            ("f3e3", 1),
+            ("f3g3", 1),
+            ("f3h3", 1),
+            ("f3f4", 1),
+            ("f3g4", 1),
+            ("f3f5", 1),
+            ("f3h5", 1),
+            ("f3f6", 1),
+            ("e1d1", 1),
+            ("e1f1", 1),
+            ("e1g1", 1),
+            ("e1c1", 1),
+        ]);
+        let actual = board.perft(1, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    #[test]
+    fn kiwipete_2_test() {
+        kiwipete_2();
+    }
+
+    fn kiwipete_2() {
+        let mut board = Board::from_str(KIWIPETE_FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("a2a3", 44),
+            ("b2b3", 42),
+            ("g2g3", 42),
+            ("d5d6", 41),
+            ("a2a4", 44),
+            ("g2g4", 42),
+            ("g2h3", 43),
+            ("d5e6", 46),
+            ("c3b1", 42),
+            ("c3d1", 42),
+            ("c3a4", 42),
+            ("c3b5", 39),
+            ("e5d3", 43),
+            ("e5c4", 42),
+            ("e5g4", 44),
+            ("e5c6", 41),
+            ("e5g6", 42),
+            ("e5d7", 45),
+            ("e5f7", 44),
+            ("d2c1", 43),
+            ("d2e3", 43),
+            ("d2f4", 43),
+            ("d2g5", 42),
+            ("d2h6", 41),
+            ("e2d1", 44),
+            ("e2f1", 44),
+            ("e2d3", 42),
+            ("e2c4", 41),
+            ("e2b5", 39),
+            ("e2a6", 36),
+            ("a1b1", 43),
+            ("a1c1", 43),
+            ("a1d1", 43),
+            ("h1f1", 43),
+            ("h1g1", 43),
+            ("f3d3", 42),
+            ("f3e3", 43),
+            ("f3g3", 43),
+            ("f3h3", 43),
+            ("f3f4", 43),
+            ("f3g4", 43),
+            ("f3f5", 45),
+            ("f3h5", 43),
+            ("f3f6", 39),
+            ("e1d1", 43),
+            ("e1f1", 43),
+            ("e1g1", 43),
+            ("e1c1", 43),
+        ]);
+        let actual = board.perft(2, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    #[test]
+    fn kiwipete_3_test() {
+        kiwipete_3();
+    }
+
+    fn kiwipete_3() {
+        let mut board = Board::from_str(KIWIPETE_FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("a2a3", 2186),
+            ("b2b3", 1964),
+            ("g2g3", 1882),
+            ("d5d6", 1991),
+            ("a2a4", 2149),
+            ("g2g4", 1843),
+            ("g2h3", 1970),
+            ("d5e6", 2241),
+            ("c3b1", 2038),
+            ("c3d1", 2040),
+            ("c3a4", 2203),
+            ("c3b5", 2138),
+            ("e5d3", 1803),
+            ("e5c4", 1880),
+            ("e5g4", 1878),
+            ("e5c6", 2027),
+            ("e5g6", 1997),
+            ("e5d7", 2124),
+            ("e5f7", 2080),
+            ("d2c1", 1963),
+            ("d2e3", 2136),
+            ("d2f4", 2000),
+            ("d2g5", 2134),
+            ("d2h6", 2019),
+            ("e2d1", 1733),
+            ("e2f1", 2060),
+            ("e2d3", 2050),
+            ("e2c4", 2082),
+            ("e2b5", 2057),
+            ("e2a6", 1907),
+            ("a1b1", 1969),
+            ("a1c1", 1968),
+            ("a1d1", 1885),
+            ("h1f1", 1929),
+            ("h1g1", 2013),
+            ("f3d3", 2005),
+            ("f3e3", 2174),
+            ("f3g3", 2214),
+            ("f3h3", 2360),
+            ("f3f4", 2132),
+            ("f3g4", 2169),
+            ("f3f5", 2396),
+            ("f3h5", 2267),
+            ("f3f6", 2111),
+            ("e1d1", 1894),
+            ("e1f1", 1855),
+            ("e1g1", 2059),
+            ("e1c1", 1887),
+        ]);
+        let actual = board.perft(3, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    fn kiwipete_4() {
+        let mut board = Board::from_str(KIWIPETE_FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("a2a3", 94405),
+            ("b2b3", 81066),
+            ("g2g3", 77468),
+            ("d5d6", 79551),
+            ("a2a4", 90978),
+            ("g2g4", 75677),
+            ("g2h3", 82759),
+            ("d5e6", 97464),
+            ("c3b1", 84773),
+            ("c3d1", 84782),
+            ("c3a4", 91447),
+            ("c3b5", 81498),
+            ("e5d3", 77431),
+            ("e5c4", 77752),
+            ("e5g4", 79912),
+            ("e5c6", 83885),
+            ("e5g6", 83866),
+            ("e5d7", 93913),
+            ("e5f7", 88799),
+            ("d2c1", 83037),
+            ("d2e3", 90274),
+            ("d2f4", 84869),
+            ("d2g5", 87951),
+            ("d2h6", 82323),
+            ("e2d1", 74963),
+            ("e2f1", 88728),
+            ("e2d3", 85119),
+            ("e2c4", 84835),
+            ("e2b5", 79739),
+            ("e2a6", 69334),
+            ("a1b1", 83348),
+            ("a1c1", 83263),
+            ("a1d1", 79695),
+            ("h1f1", 81563),
+            ("h1g1", 84876),
+            ("f3d3", 83727),
+            ("f3e3", 92505),
+            ("f3g3", 94461),
+            ("f3h3", 98524),
+            ("f3f4", 90488),
+            ("f3g4", 92037),
+            ("f3f5", 104992),
+            ("f3h5", 95034),
+            ("f3f6", 77838),
+            ("e1d1", 79989),
+            ("e1f1", 77887),
+            ("e1g1", 86975),
+            ("e1c1", 79803),
+        ]);
+        let actual = board.perft(
+            4,
+            std::thread::available_parallelism()
+                .and_then(|available| Ok(available.get()))
+                .unwrap_or(4),
+        );
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    fn kiwipete_5() {
+        let mut board = Board::from_str(KIWIPETE_FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("a2a3", 4627439),
+            ("b2b3", 3768824),
+            ("g2g3", 3472039),
+            ("d5d6", 3835265),
+            ("a2a4", 4387586),
+            ("g2g4", 3338154),
+            ("g2h3", 3819456),
+            ("d5e6", 4727437),
+            ("c3b1", 3996171),
+            ("c3d1", 3995761),
+            ("c3a4", 4628497),
+            ("c3b5", 4317482),
+            ("e5d3", 3288812),
+            ("e5c4", 3494887),
+            ("e5g4", 3415992),
+            ("e5c6", 4083458),
+            ("e5g6", 3949417),
+            ("e5d7", 4404043),
+            ("e5f7", 4164923),
+            ("d2c1", 3793390),
+            ("d2e3", 4407041),
+            ("d2f4", 3941257),
+            ("d2g5", 4370915),
+            ("d2h6", 3967365),
+            ("e2d1", 3074219),
+            ("e2f1", 4095479),
+            ("e2d3", 4066966),
+            ("e2c4", 4182989),
+            ("e2b5", 4032348),
+            ("e2a6", 3553501),
+            ("a1b1", 3827454),
+            ("a1c1", 3814203),
+            ("a1d1", 3568344),
+            ("h1f1", 3685756),
+            ("h1g1", 3989454),
+            ("f3d3", 3949570),
+            ("f3e3", 4477772),
+            ("f3g3", 4669768),
+            ("f3h3", 5067173),
+            ("f3f4", 4327936),
+            ("f3g4", 4514010),
+            ("f3f5", 5271134),
+            ("f3h5", 4743335),
+            ("f3f6", 3975992),
+            ("e1d1", 3559113),
+            ("e1f1", 3377351),
+            ("e1g1", 4119629),
+            ("e1c1", 3551583),
+        ]);
+        let actual = board.perft(
+            5,
+            std::thread::available_parallelism()
+                .and_then(|available| Ok(available.get()))
+                .unwrap_or(4),
+        );
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    const POSITION3FEN: &'static str = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 0";
+
+    #[test]
+    fn position3_1_test() {
+        position3_1();
+    }
+
+    fn position3_1() {
+        let mut board = Board::from_str(POSITION3FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("e2e3", 1),
+            ("g2g3", 1),
+            ("a5a6", 1),
+            ("e2e4", 1),
+            ("g2g4", 1),
+            ("b4b1", 1),
+            ("b4b2", 1),
+            ("b4b3", 1),
+            ("b4a4", 1),
+            ("b4c4", 1),
+            ("b4d4", 1),
+            ("b4e4", 1),
+            ("b4f4", 1),
+            ("a5a4", 1),
+        ]);
+        let actual = board.perft(1, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    #[test]
+    fn position3_2_test() {
+        position3_2();
+    }
+
+    fn position3_2() {
+        let mut board = Board::from_str(&POSITION3FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("e2e3", 15),
+            ("g2g3", 4),
+            ("a5a6", 15),
+            ("e2e4", 16),
+            ("g2g4", 17),
+            ("b4b1", 16),
+            ("b4b2", 16),
+            ("b4b3", 15),
+            ("b4a4", 15),
+            ("b4c4", 15),
+            ("b4d4", 15),
+            ("b4e4", 15),
+            ("b4f4", 2),
+            ("a5a4", 15),
+        ]);
+        let actual = board.perft(2, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    #[test]
+    fn position3_3_test() {
+        position3_3();
+    }
+
+    fn position3_3() {
+        let mut board = Board::from_str(POSITION3FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("e2e3", 205),
+            ("g2g3", 54),
+            ("a5a6", 240),
+            ("e2e4", 177),
+            ("g2g4", 226),
+            ("b4b1", 265),
+            ("b4b2", 205),
+            ("b4b3", 248),
+            ("b4a4", 202),
+            ("b4c4", 254),
+            ("b4d4", 243),
+            ("b4e4", 228),
+            ("b4f4", 41),
+            ("a5a4", 224),
+        ]);
+        let actual = board.perft(3, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    #[test]
+    fn position3_4_test() {
+        position3_4();
+    }
+    fn position3_4() {
+        let mut board = Board::from_str(POSITION3FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("e2e3", 3107),
+            ("g2g3", 1014),
+            ("a5a6", 3653),
+            ("e2e4", 2748),
+            ("g2g4", 3702),
+            ("b4b1", 4199),
+            ("b4b2", 3328),
+            ("b4b3", 3658),
+            ("b4a4", 3019),
+            ("b4c4", 3797),
+            ("b4d4", 3622),
+            ("b4e4", 3391),
+            ("b4f4", 606),
+            ("a5a4", 3394),
+        ]);
+        let actual = board.perft(4, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    #[test]
+    fn position3_5_test() {
+        position3_5();
+    }
+
+    fn position3_5() {
+        let mut board = Board::from_str(POSITION3FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("e2e3", 45326),
+            ("g2g3", 14747),
+            ("a5a6", 59028),
+            ("e2e4", 36889),
+            ("g2g4", 53895),
+            ("b4b1", 69665),
+            ("b4b2", 48498),
+            ("b4b3", 59719),
+            ("b4a4", 45591),
+            ("b4c4", 63781),
+            ("b4d4", 59574),
+            ("b4e4", 54192),
+            ("b4f4", 10776),
+            ("a5a4", 52943),
+        ]);
+        let actual = board.perft(5, 1);
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    fn position3_6() {
+        let mut board = Board::from_str(POSITION3FEN).unwrap();
+        let expected = parse_move_list(vec![
+            ("e2e3", 745505),
+            ("g2g3", 271220),
+            ("a5a6", 968724),
+            ("e2e4", 597519),
+            ("g2g4", 892781),
+            ("b4b1", 1160678),
+            ("b4b2", 818501),
+            ("b4b3", 941129),
+            ("b4a4", 745667),
+            ("b4c4", 1027199),
+            ("b4d4", 957108),
+            ("b4e4", 860971),
+            ("b4f4", 174919),
+            ("a5a4", 868162),
+        ]);
+        let actual = board.perft(
+            6,
+            std::thread::available_parallelism()
+                .and_then(|available| Ok(available.get()))
+                .unwrap_or(4),
+        );
+        assert_perft_equality(&mut board, expected, actual);
+    }
+
+    fn parse_move_list(moves: Vec<(&str, usize)>) -> Vec<(SelectedMove, usize)> {
+        moves
+            .into_iter()
+            .map(|move_| (parse_move(move_.0), move_.1))
+            .collect()
+    }
+
+    fn parse_move(move_: &str) -> SelectedMove {
+        let mut chars = move_.chars();
+        let move_ = Move {
+            from: Location::new(
+                File::try_from(chars.next().unwrap()).unwrap(),
+                Rank::try_from(chars.next().unwrap()).unwrap(),
+            ),
+            to: Location::new(
+                File::try_from(chars.next().unwrap()).unwrap(),
+                Rank::try_from(chars.next().unwrap()).unwrap(),
+            ),
+        };
+
+        if let Some('=') = chars.next() {
+            SelectedMove::Promotion {
+                move_,
+                promotion_kind: PieceKind::try_from(chars.next().unwrap()).unwrap(),
+            }
+        } else {
+            SelectedMove::Normal { move_ }
+        }
+    }
+
+    fn assert_perft_equality(
+        board_in_starting_position: &mut Board,
+        expected: Vec<(SelectedMove, usize)>,
+        actual: Vec<(PieceMove, usize)>,
+    ) {
+        let expected_acn = expected
+            .into_iter()
+            .map(|expected_perft| {
+                board_in_starting_position
+                    .make_move(expected_perft.0)
+                    .unwrap();
+                let result = (
+                    board_in_starting_position
+                        .get_move_history_acn()
+                        .pop()
+                        .unwrap()
+                        .to_string(),
+                    expected_perft.1,
+                );
+                board_in_starting_position.undo().unwrap();
+                result
+            })
+            .collect::<HashSet<_>>();
+
+        let actual_acn = actual
+            .into_iter()
+            .map(|actual_perft| (actual_perft.0.to_string(), actual_perft.1))
+            .collect::<HashSet<_>>();
+
+        for expected in expected_acn.iter() {
+            match actual_acn.get(&expected) {
+                None => panic!("Expected to find move: {}, but did not.", expected.0),
+                Some(actual) => {
+                    assert_eq!(
+                        expected.1, actual.1,
+                        "Mismatch for move {}. Expected: {}, but got {}",
+                        expected.0, expected.1, actual.1
+                    );
+                }
+            }
+        }
+
+        for actual in actual_acn {
+            if !expected_acn.contains(&actual) {
+                panic!("Did not expect to find move {}, but did.", actual.0);
+            }
+        }
     }
 }

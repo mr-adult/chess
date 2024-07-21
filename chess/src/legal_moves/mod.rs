@@ -166,9 +166,9 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
                     .flat_map(|opt| opt)
                     .any(|square| square.as_u64() == en_passant_target_pawn.as_ref().expect("there to be an en passant pawn if there is an en passant square").0) {
                         Some(CheckStoppingSquaresIterator::new_with_mailbox(
-                            &self.board, 
+                            &self.board,
                             self.player,
-                            self.board.kings[self.player.as_index()].0, 
+                            self.board.kings[self.player.as_index()].0,
                             self.board.mailbox.0 ^ en_passant_target_pawn.as_ref().unwrap().0)
                             .map(|loc| {
                                 if loc.as_u64() == en_passant_target_pawn.as_ref().unwrap().0 {
