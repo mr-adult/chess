@@ -27,12 +27,12 @@ impl TryFrom<char> for PieceKind {
     type Error = ();
     fn try_from(value: char) -> Result<Self, Self::Error> {
         match value {
-            'P' => Ok(PieceKind::Pawn),
-            'N' => Ok(PieceKind::Knight),
-            'B' => Ok(PieceKind::Bishop),
-            'R' => Ok(PieceKind::Rook),
-            'Q' => Ok(PieceKind::Queen),
-            'K' => Ok(PieceKind::King),
+            'P' | 'p' => Ok(PieceKind::Pawn),
+            'N' | 'n' => Ok(PieceKind::Knight),
+            'B' | 'b' => Ok(PieceKind::Bishop),
+            'R' | 'r' => Ok(PieceKind::Rook),
+            'Q' | 'q' => Ok(PieceKind::Queen),
+            'K' | 'k' => Ok(PieceKind::King),
             _ => Err(()),
         }
     }
