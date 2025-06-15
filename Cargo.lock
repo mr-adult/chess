@@ -238,7 +238,6 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64-url",
- "chess_ai",
  "chess_common",
  "chess_core",
  "chess_parsers",
@@ -287,6 +286,7 @@ dependencies = [
  "iso_8859_1_encoder",
  "serde",
  "serde_derive",
+ "streaming-iterator",
  "tree_iterators_rs",
 ]
 
