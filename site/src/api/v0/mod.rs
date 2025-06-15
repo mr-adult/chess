@@ -6,11 +6,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chess_common::Player;
 use chess_core::{Board, PossibleMove, SelectedMove};
 use http::StatusCode;
 use serde_derive::Deserialize;
-use streaming_iterator::StreamingIterator;
 
 use crate::{
     chess_html::render_gameboard,

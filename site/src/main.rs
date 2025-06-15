@@ -16,7 +16,6 @@ use tower_http::{
 use sqlx::{postgres::PgPoolOptions, PgPool};
 
 mod api;
-mod auth;
 mod chess_html;
 mod common;
 
@@ -39,7 +38,6 @@ async fn main() {
     // Set up the routes for our application
     let app = Router::new()
         .route("/", get(home))
-        .route("/login", post(auth::login_handler))
         .nest_service("/api/v0", api::create_api_router())
         .nest_service("/html/v0", chess_html::create_ssr_router())
         .nest_service("/styles", ServeDir::new("src/styles"))
