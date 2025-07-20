@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     response::Html,
-    routing::{get, post},
+    routing::{get},
     Router,
 };
 use chess_core::Board;
@@ -12,8 +12,6 @@ use tower_http::{
     cors::{Any, CorsLayer},
     services::{ServeDir, ServeFile},
 };
-
-use sqlx::{postgres::PgPoolOptions, PgPool};
 
 mod api;
 mod chess_html;
@@ -33,8 +31,6 @@ async fn main() {
     // First, parse the .env file for our environment setup.
     dotenvy::dotenv().ok();
 
-    // let pool = start_db().await;
-
     // Set up the routes for our application
     let app = Router::new()
         .route("/", get(home))
@@ -51,9 +47,7 @@ async fn main() {
         )
         .layer(CookieManagerLayer::new())
         // Attach our connection pool to every endpoint so the endpoints can query the DB.
-        .with_state(AppState {
-            // pgpool: pool
-        });
+        .with_state(AppState {});
 
     // Bind to port 8080
     let listener = tokio::net::TcpListener::bind("[::]:8080")
@@ -68,35 +62,7 @@ async fn main() {
 }
 
 #[derive(Clone)] // This will be cloned per-request, so no expensive to copy data should be introduced here.
-pub(crate) struct AppState {
-    // pub(crate) pgpool: PgPool
-}
-
-#[allow(unused)]
-async fn start_db() -> PgPool {
-    // We create a single connection pool for SQLx that's shared across the whole application.
-    // This saves us from opening a new connection for every API call, which is wasteful.
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    println!("{}", database_url);
-    let pool = PgPoolOptions::new()
-        // The default connection limit for a Postgres server is 100 connections, minus 3 for superusers.
-        // We should leave some connections available for manual access.
-        //
-        // If you're deploying your application with multiple replicas, then the total
-        // across all replicas should not exceed the Postgres connection limit.
-        .max_connections(10)
-        .connect(&database_url)
-        .await
-        .unwrap_or_else(|err| panic!("Could not connect to dabase_url. Error: \n{}", err));
-
-    // Run any SQL migrations to get the DB into the correct state
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .unwrap_or_else(|err| panic!("Failed to migrate the database. Error: \n{}", err));
-
-    return pool;
-}
+pub(crate) struct AppState {}
 
 async fn home(state: State<AppState>) -> Html<String> {
     render_gameboard_full_page(&Board::default())

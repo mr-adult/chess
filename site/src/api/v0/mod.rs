@@ -8,7 +8,7 @@ use axum::{
 };
 use chess_core::{Board, PossibleMove, SelectedMove};
 use http::StatusCode;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 use crate::{
     chess_html::render_gameboard,

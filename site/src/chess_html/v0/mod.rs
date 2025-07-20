@@ -46,7 +46,7 @@ async fn perft_handler(req: Query<PerftRequest>) -> Result<Html<String>, StatusC
                     "Failed to make move: '{}'. Err: {err:?}",
                     perft_move.0.to_string()
                 ),
-                Ok(val) => val,
+                Ok(_) => (),
             };
             let move_ = board.undo().unwrap();
             (move_.move_().clone(), perft_move.1)
