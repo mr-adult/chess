@@ -2,7 +2,8 @@ use iso_8859_1_encoder::{Iso8859String, Iso8859TranscodeErr};
 use std::{
     error::Error,
     fmt::{Debug, Display},
-    iter::{Enumerate, Peekable},
+    iter::{Cloned, Enumerate, Peekable},
+    ops::Range,
     slice::Iter,
 };
 
@@ -16,33 +17,25 @@ pub struct ParsedGame {
 
 impl Debug for ParsedGame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut result = "ParsedGame {\n".to_string();
-        result.push_str("\ttag_pairs: [");
-        for tag_pair in self.tag_pairs.iter() {
-            result.push_str("\n\t\t");
-            result.push_str(&tag_pair.0.to_string());
-            result.push_str(": ");
-            result.push_str(&tag_pair.1.to_string());
-        }
-        if !self.tag_pairs.is_empty() {
-            result.push_str("\n\t");
-        }
-        result.push_str("],\n");
-
-        result.push_str("\tmoves: [");
-        for move_ in self.moves.iter() {
-            result.push_str("\n\t\t");
-            result.push_str(&format!("{:?}", move_));
-        }
-        if !self.moves.is_empty() {
-            result.push('\n');
-        }
-        result.push_str("\t],\n");
-
-        result.push_str("\tresult: ");
-        result.push_str(&format!("{:?}", self.result));
-
-        write!(f, "{}", result)
+        f.debug_struct("ParsedGame")
+            .field(
+                "tag_pairs",
+                &self
+                    .tag_pairs
+                    .iter()
+                    .map(|tag_pair| (tag_pair.0.to_string(), tag_pair.1.to_string()))
+                    .collect::<Vec<_>>(),
+            )
+            .field(
+                "moves",
+                &self
+                    .moves
+                    .iter()
+                    .map(|move_| move_.to_string())
+                    .collect::<Vec<_>>(),
+            )
+            .field("result", &format!("{:?}", self.result))
+            .finish()
     }
 }
 
@@ -170,15 +163,25 @@ impl AsRef<str> for GameResult {
 pub enum PgnErr {
     Byte(PgnByteErr),
     Token(PgnTokenErr),
-    InvalidTagName(String),
-    InvalidAlgebraicChessNotation(String),
+    InvalidTagName { span: Span, tag: String },
+    InvalidAlgebraicChessNotation { span: Span, value: String },
 }
 
 pub struct PgnByteErr {
     expected: Vec<char>,
     not_expected: Vec<char>,
     found: Option<u8>,
-    byte_index: Option<usize>,
+    location: Location,
+}
+
+impl PgnByteErr {
+    pub fn location(&self) -> &Location {
+        &self.location
+    }
+
+    pub fn expected(&self) -> &[char] {
+        &self.expected
+    }
 }
 
 impl Debug for PgnByteErr {
@@ -190,10 +193,7 @@ impl Debug for PgnByteErr {
 
 impl Display for PgnByteErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let byte_index_text = match self.byte_index {
-            None => "EOF".to_string(),
-            Some(index) => index.to_string(),
-        };
+        let byte_index_text = self.location.byte_index.to_string();
 
         let found_text = match self.found {
             None => "EOF".to_string(),
@@ -220,6 +220,12 @@ pub struct PgnTokenErr {
     expected: Vec<PgnTokenKind>,
     not_expected: Vec<PgnTokenKind>,
     found: Option<PgnToken>,
+}
+
+impl PgnTokenErr {
+    pub fn found(&self) -> Option<&PgnToken> {
+        self.found.as_ref()
+    }
 }
 
 impl Debug for PgnTokenErr {
@@ -303,18 +309,29 @@ impl<'pgn> PgnParser<'pgn> {
     fn match_tag_pairs(&mut self) -> Result<Vec<(String, String)>, PgnErr> {
         let mut result = Vec::new();
 
-        while self.match_token(PgnTokenKind::LeftSquareBracket).is_some() {
-            let symbol = self.match_token_or_err(PgnTokenKind::Symbol)?;
-            let string = self.match_token_or_err(PgnTokenKind::String)?;
-            self.match_token_or_err(PgnTokenKind::RightSquareBracket)?;
+        while self
+            .match_token_if(|token| matches!(token.kind(), PgnTokenKind::LeftSquareBracket))
+            .is_some()
+        {
+            let symbol = self
+                .match_token_or_err(PgnTokenKind::Symbol(Default::default()), |token| {
+                    matches!(token.kind(), PgnTokenKind::Symbol(_))
+                })?;
+            let string = self
+                .match_token_or_err(PgnTokenKind::String(Default::default()), |token| {
+                    matches!(token.kind(), PgnTokenKind::String(_))
+                })?;
+            self.match_token_or_err(PgnTokenKind::RightSquareBracket, |token| {
+                matches!(token.kind(), PgnTokenKind::RightSquareBracket)
+            })?;
 
-            let symbol_string = if let PgnToken::Symbol(string) = symbol {
+            let symbol_string = if let PgnTokenKind::Symbol(string) = symbol.kind {
                 string
             } else {
                 unreachable!()
             };
 
-            let value_string = if let PgnToken::String(bytes) = string {
+            let value_string = if let PgnTokenKind::String(bytes) = string.kind {
                 bytes
             } else {
                 unreachable!()
@@ -324,7 +341,10 @@ impl<'pgn> PgnParser<'pgn> {
                 .chars()
                 .any(|ch| ch != '_' && !ch.is_ascii_alphanumeric())
             {
-                return Err(PgnErr::InvalidTagName(symbol_string));
+                return Err(PgnErr::InvalidTagName {
+                    span: symbol.span,
+                    tag: symbol_string,
+                });
             }
 
             result.push((
@@ -340,23 +360,37 @@ impl<'pgn> PgnParser<'pgn> {
         let mut moves = Vec::new();
         loop {
             // move numbers are optional in the import spec.
-            while self.match_token(PgnTokenKind::Comment).is_some() {}
-            self.match_token(PgnTokenKind::Integer);
-            while self.match_token(PgnTokenKind::Comment).is_some() {}
-            while self.match_token(PgnTokenKind::Period).is_some() {}
+            while self
+                .match_token_if(|token| matches!(token.kind(), PgnTokenKind::Comment(_)))
+                .is_some()
+            {}
+            self.match_token_if(|token| matches!(token.kind(), PgnTokenKind::Integer(_)));
+            while self
+                .match_token_if(|token| matches!(token.kind(), PgnTokenKind::Comment(_)))
+                .is_some()
+            {}
+            while self
+                .match_token_if(|token| matches!(token.kind(), PgnTokenKind::Period))
+                .is_some()
+            {}
 
-            while self.match_token(PgnTokenKind::Comment).is_some() {}
+            while self
+                .match_token_if(|token| matches!(token.kind(), PgnTokenKind::Comment(_)))
+                .is_some()
+            {}
 
             let white_move_token = if moves.is_empty() {
-                match self.match_token(PgnTokenKind::Symbol) {
+                match self.match_token_if(|token| matches!(token.kind(), PgnTokenKind::Symbol(_))) {
                     None => return Ok(None),
                     Some(token) => token,
                 }
             } else {
-                self.match_token_or_err(PgnTokenKind::Symbol)?
+                self.match_token_or_err(PgnTokenKind::Symbol(Default::default()), |token| {
+                    matches!(token.kind(), PgnTokenKind::Symbol(_))
+                })?
             };
 
-            if let PgnToken::Symbol(symbol) = white_move_token {
+            if let PgnTokenKind::Symbol(symbol) = white_move_token.kind {
                 match symbol.as_str() {
                     "1-0" => {
                         return Ok(Some((GameResult::WhiteWin, moves)));
@@ -374,7 +408,10 @@ impl<'pgn> PgnParser<'pgn> {
                 }
 
                 match parse_algebraic_notation(&symbol.trim()) {
-                    None => Err(PgnErr::InvalidAlgebraicChessNotation(symbol))?,
+                    None => Err(PgnErr::InvalidAlgebraicChessNotation {
+                        span: white_move_token.span,
+                        value: symbol,
+                    })?,
                     Some(move_spec) => {
                         moves.push(move_spec);
                     }
@@ -383,10 +420,13 @@ impl<'pgn> PgnParser<'pgn> {
                 unreachable!();
             };
 
-            self.match_token(PgnTokenKind::Comment);
-            match self.match_token(PgnTokenKind::Symbol) {
+            self.match_token_if(|token| matches!(token.kind(), PgnTokenKind::Comment(_)));
+            match self.match_token_if(|token| matches!(token.kind(), PgnTokenKind::Symbol(_))) {
                 None => {}
-                Some(PgnToken::Symbol(symbol)) => {
+                Some(PgnToken {
+                    kind: PgnTokenKind::Symbol(symbol),
+                    span,
+                }) => {
                     match symbol.as_str() {
                         "1-0" => {
                             return Ok(Some((GameResult::WhiteWin, moves)));
@@ -403,7 +443,10 @@ impl<'pgn> PgnParser<'pgn> {
                         _ => {}
                     }
                     match parse_algebraic_notation(&symbol) {
-                        None => Err(PgnErr::InvalidAlgebraicChessNotation(symbol))?,
+                        None => Err(PgnErr::InvalidAlgebraicChessNotation {
+                            span,
+                            value: symbol,
+                        })?,
                         Some(move_spec) => {
                             moves.push(move_spec);
                         }
@@ -416,9 +459,12 @@ impl<'pgn> PgnParser<'pgn> {
         }
     }
 
-    fn match_token_or_err(&mut self, kind: PgnTokenKind) -> Result<PgnToken, PgnErr> {
-        match self.match_token(kind) {
-            None => Err(self.get_next_err_or_expected_token(vec![kind])),
+    fn match_token_or_err<F>(&mut self, expected: PgnTokenKind, f: F) -> Result<PgnToken, PgnErr>
+    where
+        F: FnOnce(&PgnToken) -> bool,
+    {
+        match self.match_token_if(f) {
+            None => Err(self.get_next_err_or_expected_token(vec![expected])),
             Some(token) => Ok(token),
         }
     }
@@ -446,13 +492,16 @@ impl<'pgn> PgnParser<'pgn> {
         });
     }
 
-    fn match_token(&mut self, kind: PgnTokenKind) -> Option<PgnToken> {
+    fn match_token_if<F>(&mut self, f: F) -> Option<PgnToken>
+    where
+        F: FnOnce(&PgnToken) -> bool,
+    {
         match self.tokenizer.peek() {
             None => None,
             Some(token) => match token {
                 Err(_) => return None,
                 Ok(token) => {
-                    if token.kind() == kind {
+                    if f(token) {
                         return Some(
                             self.tokenizer
                                 .next()
@@ -501,15 +550,29 @@ impl<'pgn> PgnParser<'pgn> {
 ///     byte code decimal 160 through decimal 191 (inclusive) # these codes are discouraged, but allowed in the spec <br/>
 ///     byte code decimal 192 through decimal 255 (inclusive) # allowed, but should be represented by '?' if the software cannot handle rendering of these characters <br/>
 struct PgnTokenizer<'pgn> {
-    bytes: Peekable<Enumerate<Iter<'pgn, u8>>>,
+    len: usize,
+    bytes: Peekable<ByteLocations<Enumerate<Cloned<Iter<'pgn, u8>>>>>,
+    line: usize,
+    col: usize,
     errored: bool,
 }
 
 impl<'pgn> PgnTokenizer<'pgn> {
-    fn new(source: &'pgn [u8]) -> Self {
+    pub fn new(source: &'pgn [u8]) -> Self {
         Self {
-            bytes: source.iter().enumerate().peekable(),
+            len: source.len(),
+            bytes: ByteLocations::new(source.iter().cloned().enumerate()).peekable(),
             errored: false,
+            line: 0,
+            col: 0,
+        }
+    }
+
+    fn last_location(&self) -> Location {
+        Location {
+            line: self.line,
+            col: self.col,
+            byte_index: self.len,
         }
     }
 
@@ -570,34 +633,51 @@ impl<'pgn> PgnTokenizer<'pgn> {
         &mut self,
         func: &mut F,
         vec_to_append_to: &mut Vec<u8>,
-    ) {
-        while let Some(byte) = self.match_byte_if(func) {
+    ) -> Span {
+        let mut start = None;
+        while let Some((location, byte)) = self.match_byte_if(func) {
+            if start.is_none() {
+                start = Some(location);
+            }
+
             vec_to_append_to.push(byte);
+        }
+
+        Span {
+            start: start.unwrap_or(self.last_location()),
+            end: self.peek_location(),
         }
     }
 
-    fn match_byte(&mut self, byte: u8) -> bool {
+    fn match_byte(&mut self, byte: u8) -> Option<(Location, u8)> {
         self.match_byte_if(&mut |other_byte| byte == other_byte)
-            .is_some()
     }
 
-    fn match_byte_if<F: FnMut(u8) -> bool>(&mut self, func: &mut F) -> Option<u8> {
+    fn match_byte_if<F: FnMut(u8) -> bool>(&mut self, func: &mut F) -> Option<(Location, u8)> {
         match self.bytes.peek() {
             None => return None,
-            Some((_, byte)) => {
-                if func(**byte) {
+            Some((loc, byte)) => {
+                self.line = loc.line;
+                self.col = loc.col;
+
+                if func(*byte) {
                     return Some(
-                        *self
-                            .bytes
+                        self.bytes
                             .next()
-                            .expect("Should always be Some() since peek() returned Some()")
-                            .1,
+                            .expect("Should always be Some() since peek() returned Some()"),
                     );
                 } else {
                     return None;
                 }
             }
         }
+    }
+
+    fn peek_location(&mut self) -> Location {
+        self.bytes
+            .peek()
+            .map(|(loc, _)| *loc)
+            .unwrap_or(self.last_location())
     }
 }
 
@@ -610,41 +690,110 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
         }
 
         if self.match_whitespace() {
-            if let Some((_, b'%')) = self.bytes.peek() {
+            if let Some((start, b'%')) = self.bytes.peek() {
+                let start = *start;
                 self.bytes.next();
                 let mut result = Vec::new();
-                self.match_byte_while(&mut |byte| byte != b'\n', &mut result);
-                return Some(Ok(PgnToken::EscapedLine(result)));
+                let span = self.match_byte_while(&mut |byte| byte != b'\n', &mut result);
+                return Some(Ok(PgnToken {
+                    span: Span {
+                        start: start,
+                        end: span.end,
+                    },
+                    kind: PgnTokenKind::EscapedLine(result),
+                }));
             }
         }
 
-        if let Some((index, byte)) = self.bytes.next() {
-            match *byte {
+        if let Some((start, byte)) = self.bytes.next() {
+            match byte {
                 // Do the self-closing tokens first since they have simpler handling.
                 b'{' => {
                     let mut comment = Vec::new();
+                    comment.push(b'{');
 
                     self.match_byte_while(&mut |byte| byte != b'}', &mut comment);
-                    if self.bytes.peek().is_none() {
-                        return Some(Err(PgnByteErr {
-                            expected: vec!['}'],
-                            not_expected: Vec::new(),
-                            found: None,
-                            byte_index: None,
-                        }));
-                    }
 
-                    self.match_byte(b'}');
-                    return Some(Ok(PgnToken::Comment(comment)));
+                    let found = if let Some((_, ch)) = self.bytes.next() {
+                        if ch == b'}' {
+                            comment.push(b'}');
+                            return Some(Ok(PgnToken {
+                                span: Span {
+                                    start,
+                                    end: self.peek_location(),
+                                },
+                                kind: PgnTokenKind::Comment(comment),
+                            }));
+                        } else {
+                            Some(ch)
+                        }
+                    } else {
+                        None
+                    };
+
+                    return Some(Err(PgnByteErr {
+                        expected: vec!['}'],
+                        not_expected: Vec::new(),
+                        found,
+                        location: self.peek_location(),
+                    }));
                 }
-                b'[' => Some(Ok(PgnToken::LeftSquareBracket)),
-                b']' => Some(Ok(PgnToken::RightSquareBracket)),
-                b'<' => Some(Ok(PgnToken::LeftAngleBracket)),
-                b'>' => Some(Ok(PgnToken::RightAngleBracket)),
-                b'(' => Some(Ok(PgnToken::LeftParen)),
-                b')' => Some(Ok(PgnToken::RightParen)),
-                b'.' => Some(Ok(PgnToken::Period)),
-                b'*' => Some(Ok(PgnToken::Asterisk)),
+                b'[' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::LeftSquareBracket,
+                })),
+                b']' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::RightSquareBracket,
+                })),
+                b'<' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::LeftAngleBracket,
+                })),
+                b'>' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::RightAngleBracket,
+                })),
+                b'(' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::LeftParen,
+                })),
+                b')' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::RightParen,
+                })),
+                b'.' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::Period,
+                })),
+                b'*' => Some(Ok(PgnToken {
+                    span: Span {
+                        start,
+                        end: self.peek_location(),
+                    },
+                    kind: PgnTokenKind::Asterisk,
+                })),
                 b';' => {
                     let mut comment = Vec::new();
                     let mut prev_was_carriage_return = false;
@@ -669,37 +818,46 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
                         comment.pop();
                     }
                     self.match_byte(b'\n');
-                    return Some(Ok(PgnToken::Comment(comment)));
+                    return Some(Ok(PgnToken {
+                        span: Span {
+                            start,
+                            end: self.peek_location(),
+                        },
+                        kind: PgnTokenKind::Comment(comment),
+                    }));
                 }
                 b'$' => {
                     let mut result = Vec::new();
-
                     if let Some(byte) = self.match_byte_if(&mut Self::is_decimal_digit) {
-                        result.push(byte);
+                        result.push(byte.1);
                     } else {
                         return Some(Err(PgnByteErr {
                             expected: vec!['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
                             not_expected: Vec::new(),
                             found: match self.bytes.peek() {
                                 None => None,
-                                Some((_, ch)) => Some(**ch),
+                                Some((_, ch)) => Some(*ch),
                             },
-                            byte_index: match self.bytes.peek() {
-                                None => None,
-                                Some((index, _)) => Some(*index),
-                            },
+                            location: self.peek_location(),
                         }));
                     }
 
-                    self.match_byte_while(&mut Self::is_decimal_digit, &mut result);
+                    self.match_byte_while(&mut Self::is_decimal_digit, &mut result)
+                        .end;
 
                     let string = unsafe { String::from_utf8_unchecked(result) };
                     let parsed = string.parse::<usize>().ok();
 
-                    return Some(Ok(PgnToken::NAG(Integer {
-                        raw: string,
-                        parsed,
-                    })));
+                    return Some(Ok(PgnToken {
+                        span: Span {
+                            start,
+                            end: self.peek_location(),
+                        },
+                        kind: PgnTokenKind::NAG(Integer {
+                            raw: string,
+                            parsed,
+                        }),
+                    }));
                 }
                 b'"' => {
                     let mut string_content = Vec::new();
@@ -716,29 +874,35 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
                         },
                         &mut string_content,
                     );
-                    if self.match_byte(b'"') {
-                        return Some(Ok(PgnToken::String(string_content)));
+                    if self.match_byte(b'"').is_some() {
+                        return Some(Ok(PgnToken {
+                            kind: PgnTokenKind::String(string_content),
+                            span: Span {
+                                start,
+                                end: self.peek_location(),
+                            },
+                        }));
                     } else {
                         return Some(Err(match self.bytes.next() {
                             None => PgnByteErr {
                                 expected: vec!['"'],
                                 not_expected: Vec::new(),
                                 found: None,
-                                byte_index: None,
+                                location: self.peek_location(),
                             },
-                            Some((index, byte)) => PgnByteErr {
+                            Some((_, byte)) => PgnByteErr {
                                 expected: vec!['"'],
                                 not_expected: Vec::new(),
-                                found: Some(*byte),
-                                byte_index: Some(index),
+                                found: Some(byte),
+                                location: self.peek_location(),
                             },
                         }));
                     }
                 }
                 b'0'..=b'9' => {
                     let mut result = Vec::new();
-                    result.push(*byte);
-                    let matched_solidus = if *byte == b'1' && self.match_byte(b'/') {
+                    result.push(byte);
+                    let matched_solidus = if byte == b'1' && self.match_byte(b'/').is_some() {
                         result.push(b'/');
                         true
                     } else {
@@ -751,11 +915,11 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
                     if matched_solidus || len_before != result.len() {
                         if result.len() == 5
                             && result.last() == Some(&b'1')
-                            && self.match_byte(b'/')
+                            && self.match_byte(b'/').is_some()
                         {
                             // allow 1/2-1/2 to be counted as a symbol
                             result.push(b'/');
-                            if self.match_byte(b'2') {
+                            if self.match_byte(b'2').is_some() {
                                 result.push(b'2');
                             }
                         } else {
@@ -764,30 +928,46 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
                             }
                         }
 
-                        return Some(Ok(PgnToken::Symbol(unsafe {
-                            String::from_utf8_unchecked(result)
-                        })));
+                        return Some(Ok(PgnToken {
+                            span: Span {
+                                start,
+                                end: self.peek_location(),
+                            },
+                            kind: PgnTokenKind::Symbol(unsafe {
+                                String::from_utf8_unchecked(result)
+                            }),
+                        }));
                     }
 
                     let string = unsafe { String::from_utf8_unchecked(result) };
 
                     let parsed = string.parse::<usize>().ok();
-                    Some(Ok(PgnToken::Integer(Integer {
-                        raw: string,
-                        parsed,
-                    })))
+                    Some(Ok(PgnToken {
+                        span: Span {
+                            start: start,
+                            end: self.peek_location(),
+                        },
+                        kind: PgnTokenKind::Integer(Integer {
+                            raw: string,
+                            parsed,
+                        }),
+                    }))
                 }
                 b'a'..=b'z' | b'A'..=b'Z' => {
                     let mut result = Vec::with_capacity(5);
-                    result.push(*byte);
+                    result.push(byte);
                     self.match_byte_while(&mut Self::is_symbol_continuation, &mut result);
                     for _ in 0..2 {
                         self.match_byte_if(&mut |byte| byte == b'!' || byte == b'?');
                     }
 
-                    return Some(Ok(PgnToken::Symbol(unsafe {
-                        String::from_utf8_unchecked(result)
-                    })));
+                    return Some(Ok(PgnToken {
+                        kind: PgnTokenKind::Symbol(unsafe { String::from_utf8_unchecked(result) }),
+                        span: Span {
+                            start,
+                            end: self.peek_location(),
+                        },
+                    }));
                 }
                 _ => {
                     return Some(Err(PgnByteErr {
@@ -800,8 +980,8 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
                             'X', 'Y', 'Z',
                         ],
                         not_expected: Vec::new(),
-                        found: Some(*byte),
-                        byte_index: Some(index),
+                        found: Some(byte),
+                        location: self.peek_location(),
                     }));
                 }
             }
@@ -811,27 +991,8 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 enum PgnTokenKind {
-    LeftSquareBracket,
-    RightSquareBracket,
-    LeftAngleBracket,
-    RightAngleBracket,
-    LeftParen,
-    RightParen,
-    Period,
-    Asterisk,
-    NAG,
-    String,
-    Integer,
-    Symbol,
-    Comment,
-    EscapedLine,
-}
-
-#[derive(Debug)]
-enum PgnToken {
-    // Self-closing tokens first
     /// [
     LeftSquareBracket,
     /// ]
@@ -849,47 +1010,174 @@ enum PgnToken {
     /// *
     Asterisk,
     /// Numeric Annotation Glyph
-    #[allow(unused)]
     NAG(Integer),
-    #[allow(unused)]
     String(Vec<u8>),
-    #[allow(unused)]
     Integer(Integer),
-    #[allow(unused)]
     Symbol(String),
-    #[allow(unused)]
     Comment(Vec<u8>),
-    #[allow(unused)]
     EscapedLine(Vec<u8>),
 }
 
+#[derive(Debug)]
+pub struct PgnToken {
+    span: Span,
+    kind: PgnTokenKind,
+}
+
 impl PgnToken {
-    fn kind(&self) -> PgnTokenKind {
-        match self {
-            PgnToken::LeftSquareBracket => PgnTokenKind::LeftSquareBracket,
-            PgnToken::RightSquareBracket => PgnTokenKind::RightSquareBracket,
-            PgnToken::LeftAngleBracket => PgnTokenKind::LeftAngleBracket,
-            PgnToken::RightAngleBracket => PgnTokenKind::RightAngleBracket,
-            PgnToken::LeftParen => PgnTokenKind::LeftParen,
-            PgnToken::RightParen => PgnTokenKind::RightParen,
-            PgnToken::Period => PgnTokenKind::Period,
-            PgnToken::Asterisk => PgnTokenKind::Asterisk,
-            PgnToken::NAG(_) => PgnTokenKind::NAG,
-            PgnToken::String(_) => PgnTokenKind::String,
-            PgnToken::Integer(_) => PgnTokenKind::Integer,
-            PgnToken::Symbol(_) => PgnTokenKind::Symbol,
-            PgnToken::Comment(_) => PgnTokenKind::Comment,
-            PgnToken::EscapedLine(_) => PgnTokenKind::EscapedLine,
+    pub fn range(&self) -> Range<usize> {
+        (&self.span).into()
+    }
+
+    pub fn kind_str(&self) -> &'static str {
+        match self.kind {
+            PgnTokenKind::LeftSquareBracket => "LeftSquareBracket",
+            PgnTokenKind::RightSquareBracket => "RightSquareBracket",
+            PgnTokenKind::LeftAngleBracket => "LeftAngleBracket",
+            PgnTokenKind::RightAngleBracket => "RightAngleBracket",
+            PgnTokenKind::LeftParen => "LeftParen",
+            PgnTokenKind::RightParen => "RightParen",
+            PgnTokenKind::Period => "Period",
+            PgnTokenKind::Asterisk => "Asterisk",
+            PgnTokenKind::NAG(_) => "NAG",
+            PgnTokenKind::String(_) => "String",
+            PgnTokenKind::Integer(_) => "Integer",
+            PgnTokenKind::Symbol(_) => "Symbol",
+            PgnTokenKind::Comment(_) => "Comment",
+            PgnTokenKind::EscapedLine(_) => "EscapedLine",
         }
     }
 }
 
 #[derive(Debug)]
+pub struct Span {
+    start: Location,
+    end: Location,
+}
+
+impl Into<Range<usize>> for &Span {
+    fn into(self) -> Range<usize> {
+        self.start.byte_index()..self.end.byte_index()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Location {
+    line: usize,
+    col: usize,
+    byte_index: usize,
+}
+
+impl Location {
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    pub fn col(&self) -> usize {
+        self.col
+    }
+
+    pub fn byte_index(&self) -> usize {
+        self.byte_index
+    }
+}
+
+impl PgnToken {
+    fn kind(&self) -> &PgnTokenKind {
+        &self.kind
+    }
+}
+
+#[derive(Clone, Debug)]
 struct Integer {
     #[allow(unused)]
     raw: String,
     #[allow(unused)]
     parsed: Option<usize>,
+}
+
+struct ByteLocations<ByteIndices>
+where
+    ByteIndices: Iterator<Item = (usize, u8)>,
+{
+    done: bool,
+    source: Peekable<ByteIndices>,
+    line: usize,
+    col: usize,
+    previous_was_new_line: bool,
+}
+
+impl<ByteIndices> ByteLocations<ByteIndices>
+where
+    ByteIndices: Iterator<Item = (usize, u8)>,
+{
+    pub fn new(source: ByteIndices) -> Self {
+        Self {
+            done: false,
+            source: source.peekable(),
+            line: 1,
+            col: 0, // we will increment on every loop, so start at 0
+            previous_was_new_line: false,
+        }
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    pub fn col(&self) -> usize {
+        if self.col == 0 {
+            if self.line == 1 {
+                1
+            } else {
+                0
+            }
+        } else {
+            self.col
+        }
+    }
+
+    fn attach_current_location(&self, byte_index: usize) -> Location {
+        Location {
+            byte_index,
+            line: self.line,
+            col: self.col,
+        }
+    }
+}
+
+impl<ByteIndices> Iterator for ByteLocations<ByteIndices>
+where
+    ByteIndices: Iterator<Item = (usize, u8)>,
+{
+    type Item = (Location, u8);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Safety check. Don't overrun the end of any buffers
+        if self.done {
+            return None;
+        }
+
+        let next = match self.source.next() {
+            None => {
+                self.done = true;
+                return None;
+            }
+            Some(next) => next,
+        };
+
+        let location = if self.previous_was_new_line {
+            self.line += 1;
+            self.col = 1;
+            self.attach_current_location(next.0)
+        } else {
+            self.col += 1;
+            self.attach_current_location(next.0)
+        };
+
+        self.previous_was_new_line = next.1 == b'\n';
+        Some((location, next.1))
+    }
 }
 
 #[cfg(test)]
@@ -916,7 +1204,7 @@ mod tests {
         "#;
 
         let parsed = PgnParser::parse_pgn(pgn).unwrap();
-        println!("{:?}", parsed);
+        println!("{:#?}", parsed);
     }
 
     #[test]
@@ -936,11 +1224,11 @@ mod tests {
             println!("{:?}", token);
         }
         for err in errs {
-            println!("{:?}", err);
+            println!("{:#?}", err);
         }
 
         for game in PgnParser::parse_pgn(pgn).unwrap() {
-            println!("{:?}", game);
+            println!("{:#?}", game);
         }
     }
 }

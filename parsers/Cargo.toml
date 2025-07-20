@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 chess_common = { path = "../common" }
 iso_8859_1_encoder = { path = "../encoder" }
+generic_tokenizer = "0.1.0"
