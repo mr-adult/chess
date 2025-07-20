@@ -667,7 +667,7 @@ impl Board {
     }
 
     /// Makes a move where the move is passed in in algebraic chess notation
-    pub fn make_move_acn(&mut self, acn: &str) -> Result<(), AcnMoveErr> {
+    pub fn make_move_acn(&mut self, acn: &str) -> Result<SelectedMove, AcnMoveErr> {
         if let Some(move_) = parse_algebraic_notation(acn.trim()) {
             let player_to_move = self.player_to_move();
             let selected_move = match move_.move_kind {
@@ -743,12 +743,13 @@ impl Board {
                 }
             };
 
+            let selected_move_to_return = selected_move.clone();
             self.make_move(selected_move)?;
 
             match move_.check_kind {
                 Check::Mate => {
                     if self.is_check_mate() {
-                        return Ok(());
+                        return Ok(selected_move_to_return);
                     } else {
                         self.undo().expect("a move to be on the undo stack");
                         return Err(AcnMoveErr::CheckStateMismatch);
@@ -759,7 +760,7 @@ impl Board {
                         self.undo().expect("a move to be on the undo stack");
                         return Err(AcnMoveErr::CheckStateMismatch);
                     } else if self.is_check() {
-                        return Ok(());
+                        return Ok(selected_move_to_return);
                     } else {
                         self.undo().expect("a move to be on the undo stack");
                         return Err(AcnMoveErr::CheckStateMismatch);
@@ -770,7 +771,7 @@ impl Board {
                         self.undo().expect("a move to be on the undo stack");
                         return Err(AcnMoveErr::CheckStateMismatch);
                     } else {
-                        return Ok(());
+                        return Ok(selected_move_to_return);
                     }
                 }
             }

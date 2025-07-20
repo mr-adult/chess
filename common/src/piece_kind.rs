@@ -1,5 +1,6 @@
 use serde_derive::Deserialize;
 
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
 pub enum PieceKind {
     Pawn,
@@ -35,5 +36,18 @@ impl TryFrom<char> for PieceKind {
             'K' | 'k' => Ok(PieceKind::King),
             _ => Err(()),
         }
+    }
+}
+
+impl ToString for PieceKind {
+    fn to_string(&self) -> String {
+        match self {
+            PieceKind::Pawn => "pawn",
+            PieceKind::Knight => "knight",
+            PieceKind::Bishop => "bishop",
+            PieceKind::Rook => "rook",
+            PieceKind::Queen => "queen",
+            PieceKind::King => "king",
+        }.to_string()
     }
 }

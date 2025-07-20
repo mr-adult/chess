@@ -41,6 +41,14 @@ impl Move {
             Rank::castle(&Player::Black),
         ),
     };
+
+    pub fn from(&self) -> &Location {
+        &self.from
+    }
+
+    pub fn to(&self) -> &Location {
+        &self.to
+    }
 }
 
 impl Debug for Move {
