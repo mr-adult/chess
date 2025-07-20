@@ -8,6 +8,7 @@ members = [
     "common",
     "chess",
     "parsers",
+    "cli"
 ]
 
 [workspace.dependencies]
