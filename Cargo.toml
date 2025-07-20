@@ -7,5 +7,12 @@ members = [
     "encoder",
     "common",
     "chess",
-    "parsers"
+    "parsers",
 ]
+
+[workspace.dependencies]
+iso_8859_1_encoder = { path = "./encoder" }
+arr_deque = { path = "./arr_deque" }
+chess_parsers = { path = "./parsers" }
+chess_core = { path = "./chess" }
+chess_common = { path = "./common" }

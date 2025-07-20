@@ -8,12 +8,11 @@ edition = "2021"
 [lib]
 
 [dependencies]
-arr_deque = { path = "../arr_deque" }
-iso_8859_1_encoder = { path = "../encoder" }
-chess_common = { path = "../common" }
-chess_parsers = { path = "../parsers" }
+arr_deque = { workspace = true }
+iso_8859_1_encoder = { workspace = true }
+chess_common = { workspace = true }
+chess_parsers = { workspace = true }
 streaming-iterator = "0.1"
-tree_iterators_rs = "1.2.1"
 
 serde = "1.0"
 serde_derive = "1.0"

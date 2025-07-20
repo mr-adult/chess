@@ -8,8 +8,8 @@ publish = ["gitea"]
 
 [dependencies]
 # game logic
-chess_common = { path = "../common" }
-chess_core = { path = "../chess" }
-chess_parsers = { path = "../parsers" }
+chess_common = { workspace = true }
+chess_core = { workspace = true }
+chess_parsers = { workspace = true }
 
 streaming-iterator = "0.1"
