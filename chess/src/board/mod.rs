@@ -1,5 +1,5 @@
 mod acn_move_err;
-use acn_move_err::AcnMoveErr;
+pub use acn_move_err::AcnMoveErr;
 mod move_err;
 use iso_8859_1_encoder::Iso8859String;
 use move_err::MoveErr;
@@ -754,24 +754,24 @@ impl Board {
                         return Ok(selected_move_to_return);
                     } else {
                         self.undo().expect("a move to be on the undo stack");
-                        return Err(AcnMoveErr::CheckStateMismatch);
+                        return Err(AcnMoveErr::CheckStateMismatch(selected_move_to_return));
                     }
                 }
                 Check::Check => {
                     if self.is_check_mate() {
                         self.undo().expect("a move to be on the undo stack");
-                        return Err(AcnMoveErr::CheckStateMismatch);
+                        return Err(AcnMoveErr::CheckStateMismatch(selected_move_to_return));
                     } else if self.is_check() {
                         return Ok(selected_move_to_return);
                     } else {
                         self.undo().expect("a move to be on the undo stack");
-                        return Err(AcnMoveErr::CheckStateMismatch);
+                        return Err(AcnMoveErr::CheckStateMismatch(selected_move_to_return));
                     }
                 }
                 Check::None => {
                     if self.is_check() {
                         self.undo().expect("a move to be on the undo stack");
-                        return Err(AcnMoveErr::CheckStateMismatch);
+                        return Err(AcnMoveErr::CheckStateMismatch(selected_move_to_return));
                     } else {
                         return Ok(selected_move_to_return);
                     }
