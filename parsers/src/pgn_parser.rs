@@ -792,7 +792,7 @@ impl<'pgn> Iterator for PgnTokenizer<'pgn> {
                         start,
                         end: self.peek_location(),
                     },
-                    kind: PgnTokenKind::Asterisk,
+                    kind: PgnTokenKind::Symbol("*".to_string()),
                 })),
                 b';' => {
                     let mut comment = Vec::new();
@@ -1007,8 +1007,6 @@ enum PgnTokenKind {
     RightParen,
     /// .
     Period,
-    /// *
-    Asterisk,
     /// Numeric Annotation Glyph
     NAG(Integer),
     String(Vec<u8>),
@@ -1038,7 +1036,6 @@ impl PgnToken {
             PgnTokenKind::LeftParen => "LeftParen",
             PgnTokenKind::RightParen => "RightParen",
             PgnTokenKind::Period => "Period",
-            PgnTokenKind::Asterisk => "Asterisk",
             PgnTokenKind::NAG(_) => "NAG",
             PgnTokenKind::String(_) => "String",
             PgnTokenKind::Integer(_) => "Integer",
@@ -1182,7 +1179,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::pgn_parser::PgnTokenizer;
+    use crate::{parse_pgn, pgn_parser::PgnTokenizer};
 
     use super::PgnParser;
 
