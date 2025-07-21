@@ -11,7 +11,7 @@ pub struct ArrDeque<T, const N: usize> {
     items: [MaybeUninit<T>; N],
     /// The front index (inclusive).
     front: usize,
-    /// The back index (inclusive).
+    /// The back index (exclusive).
     back: usize,
     /// Because front will equal back at both size 0
     /// and size items.len(), we must keep track of
@@ -228,8 +228,14 @@ impl<A, const N: usize> Extend<A> for ArrDeque<A, N> {
 impl<A, const N: usize> FromIterator<A> for ArrDeque<A, N> {
     fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
         let mut arr_deque = Self::new();
-        for item in iter {
-            assert!(arr_deque.push_back(item).is_ok())
+        for (i, item) in iter.into_iter().enumerate() {
+            if i >= N { panic!("overflow condition: too many elements to fit in ArrDeque<T, {}>", N); }
+            arr_deque.items[i] = MaybeUninit::new(item);
+            arr_deque.len = i + 1;
+        }
+
+        if arr_deque.len != 0 {
+            arr_deque.back = arr_deque.len - 1;
         }
         arr_deque
     }
