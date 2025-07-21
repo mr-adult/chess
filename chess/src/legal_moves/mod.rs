@@ -164,26 +164,30 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
                 if self.check_blocking_squares
                     .iter()
                     .flat_map(|opt| opt)
-                    .any(|square| square.as_u64() == en_passant_target_pawn.as_ref().expect("there to be an en passant pawn if there is an en passant square").0) {
-                        Some(CheckStoppingSquaresIterator::new_with_mailbox(
+                    .any(|square| square.as_u64() == en_passant_target_pawn.clone().expect("there to be an en passant pawn if there is an en passant square").0) {
+                        let en_passant_target_pawn = en_passant_target_pawn.clone().unwrap();
+                        let mut new_targets = ArrDeque::new();
+
+                        for loc in CheckStoppingSquaresIterator::new_with_mailbox(
                             &self.board,
                             self.player,
                             self.board.kings[self.player.as_index()].0,
-                            self.board.mailbox.0 ^ en_passant_target_pawn.as_ref().unwrap().0)
-                            .map(|loc| {
-                                if loc.as_u64() == en_passant_target_pawn.as_ref().unwrap().0 {
+                            self.board.mailbox.0 ^ en_passant_target_pawn.0) {
+                                if loc.as_u64() == en_passant_target_pawn.0 {
                                     match self.player {
                                         Player::White => {
-                                            Location::try_from(en_passant_target_pawn.clone().unwrap().up().0).expect(Location::failed_from_usize_message())
+                                            assert!(new_targets.push_back(Location::try_from(en_passant_target_pawn.up().0).expect(Location::failed_from_usize_message())).is_ok());
                                         }
                                         Player::Black => {
-                                            Location::try_from(en_passant_target_pawn.clone().unwrap().down().0).expect(Location::failed_from_usize_message())
+                                            assert!(new_targets.push_back(Location::try_from(en_passant_target_pawn.down().0).expect(Location::failed_from_usize_message())).is_ok());
                                         }
                                     }
-                                } else {
-                                    loc
                                 }
-                            }).collect::<ArrDeque<_, 8>>())
+
+                                assert!(new_targets.push_back(loc).is_ok());
+                            }
+
+                            Some(new_targets)
                     } else {
                         None
                     }
