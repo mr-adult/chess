@@ -119,6 +119,7 @@ impl Board {
         self.mailbox = BitBoard::new(result);
     }
 
+    #[inline]
     pub(crate) fn assert_board_integrity(&self) {
         #[cfg(not(debug_assertions))]
         return;
@@ -131,6 +132,7 @@ impl Board {
 
                 if bitboard_1.0 & bitboard_2.0 != 0 {
                     let locations = Location::from_bitboard(bitboard_1.0 & bitboard_2.0)
+                        .into_iter()
                         .map(|loc| format!("{:?}", loc))
                         .collect::<Vec<_>>()
                         .join(", ");

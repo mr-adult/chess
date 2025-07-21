@@ -113,8 +113,7 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
         }
 
         if !self.king_moves_iterator_finished {
-            let next_king_move = self.king_moves_iterator.next();
-            match next_king_move {
+            match self.king_moves_iterator.next() {
                 None => self.king_moves_iterator_finished = true,
                 Some(move_) => return Some(PossibleMove::Normal { move_ }),
             }

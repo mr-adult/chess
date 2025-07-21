@@ -1,5 +1,6 @@
 use std::vec;
 
+use arr_deque::ArrDeque;
 use chess_common::Location;
 
 use crate::{bitboard::BitBoard, Board, Move};
@@ -9,7 +10,7 @@ use super::all_iterator::RookMovesIterator;
 pub(crate) struct LegalRookMovesIterator<'board> {
     #[allow(unused)]
     board: &'board Board,
-    rook_locations: vec::IntoIter<Location>,
+    rook_locations: ArrDeque<Location, 64>,
     current_rook_data: Option<CurrentRookData>,
     friendlies: BitBoard,
     hostiles: BitBoard,
@@ -52,7 +53,7 @@ impl<'board> Iterator for LegalRookMovesIterator<'board> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let current_rook_data = match &mut self.current_rook_data {
-                None => match self.rook_locations.next() {
+                None => match self.rook_locations.pop_front() {
                     None => return None,
                     Some(location) => {
                         let location_u64 = location.as_u64();

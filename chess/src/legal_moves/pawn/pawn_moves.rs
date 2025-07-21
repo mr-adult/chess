@@ -7,7 +7,7 @@ pub(crate) struct LegalPawnMovesIterator<'board> {
     board: &'board Board,
     hostiles: BitBoard,
     lookahead: ArrDeque<Move, 5>,
-    pawn_locations: Box<dyn Iterator<Item = Location>>,
+    pawn_locations: ArrDeque<Location, 64>,
 }
 
 impl<'board> LegalPawnMovesIterator<'board> {
@@ -18,9 +18,9 @@ impl<'board> LegalPawnMovesIterator<'board> {
             board,
             hostiles: board.create_mailbox_for_player(hostile_player),
             lookahead: ArrDeque::new(),
-            pawn_locations: Box::new(Location::from_bitboard(
+            pawn_locations: Location::from_bitboard(
                 board.pawns[moving_player.as_index()].0,
-            )),
+            ),
         }
     }
 }
@@ -33,7 +33,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
             return Some(lookahead);
         }
 
-        while let Some(location) = self.pawn_locations.next() {
+        while let Some(location) = self.pawn_locations.pop_front() {
             let location_bb = BitBoard::new(location.as_u64());
             match self.board.player_to_move() {
                 Player::White => {

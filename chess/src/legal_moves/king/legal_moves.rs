@@ -93,10 +93,14 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             });
         }
 
-        if LegalKingMovesIterator::is_check(self.board, self.player, self.king_bitboard.0)
-            || (self.checked_castle_queenside && self.checked_castle_kingside)
-        {
+        if self.checked_castle_queenside && self.checked_castle_kingside {
             return None;
+        }
+
+        if !self.checked_castle_queenside && !self.checked_castle_kingside {
+            if LegalKingMovesIterator::is_check(self.board, self.player, self.king_bitboard.0) {
+                return None;
+            }
         }
 
         let castle_rank = match self.player {
@@ -108,20 +112,24 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             self.checked_castle_queenside = true;
 
             if self.board.player_can_castle_queenside(&self.player) {
-                let any_pieces_in_way = [File::b, File::c, File::d]
-                    .into_iter()
-                    .map(|file| Location::new(file, castle_rank))
-                    .map(|loc| loc.as_u64())
-                    .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard));
+                let any_pieces_in_way = || {
+                    [File::b, File::c, File::d]
+                        .into_iter()
+                        .map(|file| Location::new(file, castle_rank))
+                        .map(|loc| loc.as_u64())
+                        .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard))
+                };
 
-                let any_checks_in_way = [File::c, File::d]
-                    .into_iter()
-                    .map(|file| Location::new(file, castle_rank))
-                    .any(|loc| Self::is_check(&self.board, self.player, loc.as_u64()));
+                let any_checks_in_way = || {
+                    [File::c, File::d]
+                        .into_iter()
+                        .map(|file| Location::new(file, castle_rank))
+                        .any(|loc| Self::is_check(&self.board, self.player, loc.as_u64()))
+                };
 
                 let to_loc = Location::new(File::c, castle_rank);
-                if !any_pieces_in_way
-                    && !any_checks_in_way
+                if !any_pieces_in_way()
+                    && !any_checks_in_way()
                     && !Self::is_check(self.board, self.player, to_loc.as_u64())
                 {
                     return Some(Move {

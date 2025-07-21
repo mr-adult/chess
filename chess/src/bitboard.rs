@@ -6,22 +6,19 @@ use std::{
 
 use chess_common::{File, Rank};
 
-#[cfg(debug_assertions)]
-use chess_common::Location;
-
 pub(crate) struct BitBoard(
     pub(crate) u64,
-    #[allow(unused)]
-    #[cfg(debug_assertions)]
-    Location,
+    // #[allow(unused)]
+    // #[cfg(debug_assertions)]
+    // chess_common::Location,
 );
 
 impl BitBoard {
     pub(crate) fn new(value: u64) -> Self {
         BitBoard(
             value,
-            #[cfg(debug_assertions)]
-            Location::try_from(value).unwrap_or(Location::new(File::a, Rank::One)),
+            // #[cfg(debug_assertions)]
+            // chess_common::Location::try_from(value).unwrap_or(chess_common::Location::new(File::a, Rank::One)),
         )
     }
 
@@ -57,10 +54,12 @@ impl BitBoard {
         Self::new(self.0.wrapping_shr(7) & !File::a_bit_filter())
     }
 
+    #[inline]
     pub(crate) fn intersects_with(&self, other: &BitBoard) -> bool {
         self.intersects_with_u64(other.0)
     }
 
+    #[inline]
     pub(crate) fn intersects_with_u64(&self, other: u64) -> bool {
         (self.0 & other) != 0
     }

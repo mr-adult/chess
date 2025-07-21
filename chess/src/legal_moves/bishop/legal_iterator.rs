@@ -1,5 +1,6 @@
 use std::vec::IntoIter;
 
+use arr_deque::ArrDeque;
 use chess_common::Location;
 
 use crate::{bitboard::BitBoard, Board, Move};
@@ -9,7 +10,7 @@ use super::all_iterator::BishopMovesIterator;
 pub(crate) struct LegalBishopMovesIterator<'board> {
     #[allow(unused)]
     board: &'board Board,
-    bishop_locations: IntoIter<Location>,
+    bishop_locations: ArrDeque<Location, 64>,
     current_bishop_data: Option<CurrentBishopData>,
     friendlies: BitBoard,
     hostiles: BitBoard,
@@ -52,7 +53,7 @@ impl<'board> Iterator for LegalBishopMovesIterator<'board> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let current_bishop_data = match &mut self.current_bishop_data {
-                None => match self.bishop_locations.next() {
+                None => match self.bishop_locations.pop_front() {
                     None => return None,
                     Some(location) => {
                         let move_data = CurrentBishopData {

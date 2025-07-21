@@ -9,7 +9,7 @@ pub(crate) struct LegalKnightMovesIterator<'board> {
     #[allow(unused)]
     board: &'board Board,
     friendlies: BitBoard,
-    locations: Box<dyn Iterator<Item = Location>>,
+    locations: ArrDeque<Location, 64>,
     lookahead: ArrDeque<Move, 8>,
 }
 
@@ -20,9 +20,9 @@ impl<'board> LegalKnightMovesIterator<'board> {
         Self {
             board: &board,
             friendlies: board.create_mailbox_for_player(player_to_move),
-            locations: Box::new(Location::from_bitboard(
+            locations: Location::from_bitboard(
                 board.knights[player_to_move_index].0,
-            )),
+            ),
             lookahead: ArrDeque::new(),
         }
     }
@@ -36,7 +36,7 @@ impl<'board> Iterator for LegalKnightMovesIterator<'board> {
             return Some(front);
         }
 
-        while let Some(location) = self.locations.next() {
+        while let Some(location) = self.locations.pop_front() {
             let mut iter = KnightMovesIterator::new(BitBoard::new(location.as_u64()));
             while let Some(knight_move) = iter.next() {
                 if self.friendlies.intersects_with(&knight_move) {

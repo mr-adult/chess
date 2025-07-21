@@ -1,6 +1,7 @@
 use std::vec::IntoIter;
 
 use crate::{file::File, rank::Rank, Player};
+use arr_deque::ArrDeque;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -27,116 +28,335 @@ impl Location {
         "Expected only one bit to be populated."
     }
 
-    pub fn from_bitboard(bitboard: u64) -> IntoIter<Self> {
+    pub fn from_bitboard(bitboard: u64) -> ArrDeque<Location, 64> {
         if bitboard & u64::MAX == 0 {
-            return Vec::new().into_iter();
+            return ArrDeque::new()
         }
 
-        let mut ranks = Vec::with_capacity(8); // Pre-allocate for the worst case (1 piece per rank).
-        if bitboard & Rank::one_through_four_bit_filter() != 0 {
-            if bitboard & Rank::one_or_two_bit_filter() != 0 {
-                if bitboard & Rank::one_bit_filter() != 0 {
-                    ranks.push(Rank::One);
-                }
-                if bitboard & Rank::two_bit_filter() != 0 {
-                    ranks.push(Rank::Two);
-                }
-            }
-            if bitboard & Rank::three_or_four_bit_filter() != 0 {
-                if bitboard & Rank::three_bit_filter() != 0 {
-                    ranks.push(Rank::Three);
-                }
-                if bitboard & Rank::four_bit_filter() != 0 {
-                    ranks.push(Rank::Four);
-                }
-            }
+        let mut arr_deque = ArrDeque::new();
+
+        if bitboard & 0x1 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::One))
+                .is_ok());
         }
-        if bitboard & Rank::five_through_eight_bit_filter() != 0 {
-            if bitboard & Rank::five_or_six_bit_filter() != 0 {
-                if bitboard & Rank::five_bit_filter() != 0 {
-                    ranks.push(Rank::Five);
-                }
-                if bitboard & Rank::six_bit_filter() != 0 {
-                    ranks.push(Rank::Six);
-                }
-            }
-            if bitboard & Rank::seven_or_eight_bit_filter() != 0 {
-                if bitboard & Rank::seven_bit_filter() != 0 {
-                    ranks.push(Rank::Seven);
-                }
-                if bitboard & Rank::eight_bit_filter() != 0 {
-                    ranks.push(Rank::Eight);
-                }
-            }
+        if bitboard & 0x2 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::One))
+                .is_ok());
+        }
+        if bitboard & 0x4 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::One))
+                .is_ok());
+        }
+        if bitboard & 0x8 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::One))
+                .is_ok());
+        }
+        if bitboard & 0x10 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::One))
+                .is_ok());
+        }
+        if bitboard & 0x20 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::One))
+                .is_ok());
+        }
+        if bitboard & 0x40 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::One))
+                .is_ok());
+        }
+        if bitboard & 0x80 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::One))
+                .is_ok());
+        }
+        if bitboard & 0x100 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x200 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x400 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x800 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x1000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x2000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x4000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x8000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::Two))
+                .is_ok());
+        }
+        if bitboard & 0x10000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x20000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x40000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x80000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x100000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x200000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x400000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x800000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::Three))
+                .is_ok());
+        }
+        if bitboard & 0x1000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x2000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x4000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x8000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x10000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x20000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x40000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x80000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::Four))
+                .is_ok());
+        }
+        if bitboard & 0x100000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x200000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x400000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x800000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x1000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x2000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x4000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x8000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::Five))
+                .is_ok());
+        }
+        if bitboard & 0x10000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x20000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x40000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x80000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x100000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x200000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x400000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x800000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::Six))
+                .is_ok());
+        }
+        if bitboard & 0x1000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x2000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x4000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x8000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x10000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x20000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x40000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x80000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::Seven))
+                .is_ok());
+        }
+        if bitboard & 0x100000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::a, Rank::Eight))
+                .is_ok());
+        }
+        if bitboard & 0x200000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::b, Rank::Eight))
+                .is_ok());
+        }
+        if bitboard & 0x400000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::c, Rank::Eight))
+                .is_ok());
+        }
+        if bitboard & 0x800000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::d, Rank::Eight))
+                .is_ok());
+        }
+        if bitboard & 0x1000000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::e, Rank::Eight))
+                .is_ok());
+        }
+        if bitboard & 0x2000000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::f, Rank::Eight))
+                .is_ok());
+        }
+        if bitboard & 0x4000000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::g, Rank::Eight))
+                .is_ok());
+        }
+        if bitboard & 0x8000000000000000 != 0 {
+            assert!(arr_deque
+                .push_back(Location::new(File::h, Rank::Eight))
+                .is_ok());
         }
 
-        // pre-allocate for the expected worst case (8 pawns)
-        let mut locations = Vec::with_capacity(8);
-        for rank in ranks {
-            let filtered_to_rank = bitboard & rank.bit_filter();
-            if filtered_to_rank & File::a_through_d_bit_filter() != 0 {
-                if filtered_to_rank & File::a_or_b_bit_filter() != 0 {
-                    if filtered_to_rank & File::a_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::a,
-                            rank,
-                        });
-                    }
-                    if filtered_to_rank & File::b_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::b,
-                            rank,
-                        });
-                    }
-                }
-                if filtered_to_rank & File::c_or_d_bit_filter() != 0 {
-                    if filtered_to_rank & File::c_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::c,
-                            rank,
-                        });
-                    }
-                    if filtered_to_rank & File::d_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::d,
-                            rank,
-                        });
-                    }
-                }
-            }
-            if filtered_to_rank & File::e_through_h_bit_filter() != 0 {
-                if filtered_to_rank & File::e_or_f_bit_filter() != 0 {
-                    if filtered_to_rank & File::e_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::e,
-                            rank,
-                        });
-                    }
-                    if filtered_to_rank & File::f_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::f,
-                            rank,
-                        });
-                    }
-                }
-                if filtered_to_rank & File::g_or_h_bit_filter() != 0 {
-                    if filtered_to_rank & File::g_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::g,
-                            rank,
-                        });
-                    }
-                    if filtered_to_rank & File::h_bit_filter() != 0 {
-                        locations.push(Location {
-                            file: File::h,
-                            rank,
-                        });
-                    }
-                }
-            }
-        }
-
-        return locations.into_iter();
+        return arr_deque;
     }
 
     pub const fn file(&self) -> File {
@@ -155,21 +375,75 @@ impl Location {
 impl TryFrom<u64> for Location {
     type Error = ();
 
+    #[inline]
     fn try_from(value: u64) -> Result<Self, Self::Error> {
-        // https://stackoverflow.com/questions/28303832/check-if-byte-has-more-than-one-bit-set
-        if value == 0 || value & (value - 1) != 0 {
-            return Err(());
+        match value {
+            0x0000000000000001 => Ok(Location::new(File::a, Rank::One)),
+            0x0000000000000002 => Ok(Location::new(File::b, Rank::One)),
+            0x0000000000000004 => Ok(Location::new(File::c, Rank::One)),
+            0x0000000000000008 => Ok(Location::new(File::d, Rank::One)),
+            0x0000000000000010 => Ok(Location::new(File::e, Rank::One)),
+            0x0000000000000020 => Ok(Location::new(File::f, Rank::One)),
+            0x0000000000000040 => Ok(Location::new(File::g, Rank::One)),
+            0x0000000000000080 => Ok(Location::new(File::h, Rank::One)),
+            0x0000000000000100 => Ok(Location::new(File::a, Rank::Two)),
+            0x0000000000000200 => Ok(Location::new(File::b, Rank::Two)),
+            0x0000000000000400 => Ok(Location::new(File::c, Rank::Two)),
+            0x0000000000000800 => Ok(Location::new(File::d, Rank::Two)),
+            0x0000000000001000 => Ok(Location::new(File::e, Rank::Two)),
+            0x0000000000002000 => Ok(Location::new(File::f, Rank::Two)),
+            0x0000000000004000 => Ok(Location::new(File::g, Rank::Two)),
+            0x0000000000008000 => Ok(Location::new(File::h, Rank::Two)),
+            0x0000000000010000 => Ok(Location::new(File::a, Rank::Three)),
+            0x0000000000020000 => Ok(Location::new(File::b, Rank::Three)),
+            0x0000000000040000 => Ok(Location::new(File::c, Rank::Three)),
+            0x0000000000080000 => Ok(Location::new(File::d, Rank::Three)),
+            0x0000000000100000 => Ok(Location::new(File::e, Rank::Three)),
+            0x0000000000200000 => Ok(Location::new(File::f, Rank::Three)),
+            0x0000000000400000 => Ok(Location::new(File::g, Rank::Three)),
+            0x0000000000800000 => Ok(Location::new(File::h, Rank::Three)),
+            0x0000000001000000 => Ok(Location::new(File::a, Rank::Four)),
+            0x0000000002000000 => Ok(Location::new(File::b, Rank::Four)),
+            0x0000000004000000 => Ok(Location::new(File::c, Rank::Four)),
+            0x0000000008000000 => Ok(Location::new(File::d, Rank::Four)),
+            0x0000000010000000 => Ok(Location::new(File::e, Rank::Four)),
+            0x0000000020000000 => Ok(Location::new(File::f, Rank::Four)),
+            0x0000000040000000 => Ok(Location::new(File::g, Rank::Four)),
+            0x0000000080000000 => Ok(Location::new(File::h, Rank::Four)),
+            0x0000000100000000 => Ok(Location::new(File::a, Rank::Five)),
+            0x0000000200000000 => Ok(Location::new(File::b, Rank::Five)),
+            0x0000000400000000 => Ok(Location::new(File::c, Rank::Five)),
+            0x0000000800000000 => Ok(Location::new(File::d, Rank::Five)),
+            0x0000001000000000 => Ok(Location::new(File::e, Rank::Five)),
+            0x0000002000000000 => Ok(Location::new(File::f, Rank::Five)),
+            0x0000004000000000 => Ok(Location::new(File::g, Rank::Five)),
+            0x0000008000000000 => Ok(Location::new(File::h, Rank::Five)),
+            0x0000010000000000 => Ok(Location::new(File::a, Rank::Six)),
+            0x0000020000000000 => Ok(Location::new(File::b, Rank::Six)),
+            0x0000040000000000 => Ok(Location::new(File::c, Rank::Six)),
+            0x0000080000000000 => Ok(Location::new(File::d, Rank::Six)),
+            0x0000100000000000 => Ok(Location::new(File::e, Rank::Six)),
+            0x0000200000000000 => Ok(Location::new(File::f, Rank::Six)),
+            0x0000400000000000 => Ok(Location::new(File::g, Rank::Six)),
+            0x0000800000000000 => Ok(Location::new(File::h, Rank::Six)),
+            0x0001000000000000 => Ok(Location::new(File::a, Rank::Seven)),
+            0x0002000000000000 => Ok(Location::new(File::b, Rank::Seven)),
+            0x0004000000000000 => Ok(Location::new(File::c, Rank::Seven)),
+            0x0008000000000000 => Ok(Location::new(File::d, Rank::Seven)),
+            0x0010000000000000 => Ok(Location::new(File::e, Rank::Seven)),
+            0x0020000000000000 => Ok(Location::new(File::f, Rank::Seven)),
+            0x0040000000000000 => Ok(Location::new(File::g, Rank::Seven)),
+            0x0080000000000000 => Ok(Location::new(File::h, Rank::Seven)),
+            0x0100000000000000 => Ok(Location::new(File::a, Rank::Eight)),
+            0x0200000000000000 => Ok(Location::new(File::b, Rank::Eight)),
+            0x0400000000000000 => Ok(Location::new(File::c, Rank::Eight)),
+            0x0800000000000000 => Ok(Location::new(File::d, Rank::Eight)),
+            0x1000000000000000 => Ok(Location::new(File::e, Rank::Eight)),
+            0x2000000000000000 => Ok(Location::new(File::f, Rank::Eight)),
+            0x4000000000000000 => Ok(Location::new(File::g, Rank::Eight)),
+            0x8000000000000000 => Ok(Location::new(File::h, Rank::Eight)),
+            _ => return Err(()),
         }
-
-        let mut iter = Location::from_bitboard(value);
-        if let Some(value) = iter.next() {
-            let value = value;
-            if iter.next().is_some() {
-                return Err(());
-            }
-            return Ok(value);
-        }
-        return Err(());
     }
 }
 
@@ -181,8 +455,6 @@ impl ToString for Location {
         return result;
     }
 }
-
-// 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
 
 #[cfg(test)]
 mod tests {

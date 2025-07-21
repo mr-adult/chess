@@ -295,6 +295,7 @@ dependencies = [
 name = "chess_common"
 version = "0.1.0"
 dependencies = [
+ "arr_deque",
  "serde",
  "serde_derive",
 ]
