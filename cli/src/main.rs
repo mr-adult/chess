@@ -1,7 +1,7 @@
 use std::{fs::OpenOptions, io::Read, process::ExitCode};
 
 use chess_common::{File, PieceKind, Player, Rank};
-use chess_core::Board;
+use chess_core::{AcnMoveErr, Board};
 use chess_parsers::{Check, ParsedGame, PgnErr, PieceMoveKind};
 use clap::{command, Arg, Command};
 use codespan_reporting::{
@@ -53,9 +53,13 @@ fn create_command() -> Command {
             .arg(
                 Arg::new("destination sqlite file")
                     .required(true)
-                    .help("the file where the sqlite3 database should be created"),
+                    .help("the file where the sqlite database should be created"),
             )
-            .arg(Arg::new("pgn files").required(true)),
+            .arg(
+                Arg::new("pgn files")
+                    .required(true)
+                    .help("the pgn files to be loaded into the sqlite"),
+            ),
     )
 }
 
@@ -166,6 +170,10 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                             return Err(());
                         }
 
+                        if let Err(_) = sqlite_conn.pragma_update(None, "journal_mode", "DELETE") {
+                            error!("Failed to reset SQLite to standard journal_mode");
+                        }
+
                         return Ok(());
                     }
                 }
@@ -178,6 +186,7 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
 
 fn initialize_sqlite_db(conn: &Connection) -> Result<(), Error> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.pragma_update(None, "journal_mode", "wal")?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS pieces (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL);",
@@ -246,7 +255,6 @@ CREATE TABLE IF NOT EXISTS moves (
     is_check INTEGER check(is_check BETWEEN 0 AND 1),
     is_checkmate INTEGER check(is_checkmate BETWEEN 0 AND 1),
     piece INT,
-    fen_before TEXT NOT NULL,
     fen_after TEXT NOT NULL,
     acn TEXT NOT NULL,
     game_id INTEGER NOT NULL,
@@ -265,7 +273,9 @@ CREATE TABLE IF NOT EXISTS illegal_games (
     date TEXT,
     round TEXT,
     white TEXT,
-    black TEXT
+    black TEXT,
+    illegal_move_number INTEGER NOT NULL,
+    fen_at_illegal_move TEXT NOT NULL
 );"#,
         [],
     )?;
@@ -315,15 +325,32 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
         let mut board = Board::default();
 
         let mut moves = Vec::new();
-        for move_ in game.moves.iter() {
-            let fen_before = board.to_fen_string();
+        for (i, move_) in game.moves.iter().enumerate() {
             let player = board.player_to_move();
             let selected_move = match board.make_move_acn(&move_.to_string()) {
-                Err(_) => {
-                    illegal_games.push(game);
+                Ok(selected_move) => selected_move,
+                Err(AcnMoveErr::CheckStateMismatch(selected_move)) => {
+                    if i == game.moves.len() - 1 {
+                        selected_move
+                    } else {
+                        error!("Illegal move: check state mismatch");
+                        illegal_games.push(IllegalMoveRowModel {
+                            parsed_game: game,
+                            illegal_move_number: i,
+                            fen_at_illegal_move: board.to_fen_string(),
+                        });
+                        continue 'game_loop;
+                    }
+                }
+                Err(err) => {
+                    error!("Illegal move: {err:?}");
+                    illegal_games.push(IllegalMoveRowModel {
+                        parsed_game: game,
+                        illegal_move_number: i,
+                        fen_at_illegal_move: board.to_fen_string(),
+                    });
                     continue 'game_loop;
                 }
-                Ok(selected_move) => selected_move,
             };
 
             let fen_after = board.to_fen_string();
@@ -334,7 +361,6 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
                 to_rank: selected_move.move_().to().rank(),
                 acn: move_.to_string(),
                 player,
-                fen_before,
                 fen_after,
                 piece: match &move_.move_kind {
                     PieceMoveKind::CastleKingside | PieceMoveKind::CastleQueenside => None,
@@ -393,7 +419,7 @@ fn insert_legal_games(
 ) -> Result<(), ()> {
     let mut global_move_number = 0;
     let mut insert_game = connection.prepare("INSERT INTO games (id, event, site, date, round, white, black) VALUES (?, ?, ?, ?, ?, ?, ?);").unwrap();
-    let mut insert_moves_stmt = "INSERT INTO moves (move_number, from_rank, from_file, to_rank, to_file, player, is_castle_kingside, is_castle_queenside, piece, fen_before, fen_after, acn, game_id) VALUES ".to_string();
+    let mut insert_moves_stmt = "INSERT INTO moves (move_number, from_rank, from_file, to_rank, to_file, player, is_castle_kingside, is_castle_queenside, piece, fen_after, acn, game_id) VALUES ".to_string();
 
     for (game_id, game) in legal_games.into_iter().enumerate() {
         let params = (
@@ -420,7 +446,7 @@ fn insert_legal_games(
             }
 
             let insert_moves_line = &format!(
-                "({move_number},{},'{}',{},'{}','{}',{},{},{},'{}','{}','{}',{game_id})",
+                "({move_number},{},'{}',{},'{}','{}',{},{},{},'{}','{}',{game_id})",
                 move_.from_rank.as_int(),
                 move_.from_file.as_char(),
                 move_.to_rank.as_int(),
@@ -438,7 +464,6 @@ fn insert_legal_games(
                     None => "NULL".to_string(),
                     Some(bit) => bit.to_string(),
                 },
-                move_.fen_before,
                 move_.fen_after,
                 move_.acn,
             );
@@ -448,17 +473,22 @@ fn insert_legal_games(
         }
     }
 
-    if let Err(err) = connection.execute(&insert_moves_stmt, []) {
-        error!("Failed to insert moves into the database. Inner error: {err}");
-        return Err(());
+    if global_move_number != 0 {
+        if let Err(err) = connection.execute(&insert_moves_stmt, []) {
+            error!("Failed to insert moves into the database. Inner error: {err}");
+            return Err(());
+        }
     }
 
     Ok(())
 }
 
-fn insert_illegal_games(connection: &Connection, illegal_games: Vec<ParsedGame>) -> Result<(), ()> {
+fn insert_illegal_games(
+    connection: &Connection,
+    illegal_games: Vec<IllegalMoveRowModel>,
+) -> Result<(), ()> {
     let mut global_move_number = 0;
-    let mut insert_game = connection.prepare("INSERT INTO illegal_games (id, event, site, date, round, white, black) VALUES (?, ?, ?, ?, ?, ?, ?);").unwrap();
+    let mut insert_game = connection.prepare("INSERT INTO illegal_games (id, event, site, date, round, white, black, illegal_move_number, fen_at_illegal_move) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);").unwrap();
     let mut insert_moves_stmt = "INSERT INTO illegal_game_moves (move_number, from_rank, from_file, to_rank, to_file, is_castle_kingside, is_castle_queenside, is_check, is_checkmate, piece, acn, game_id) VALUES ".to_string();
 
     for (game_id, game) in illegal_games.into_iter().enumerate() {
@@ -469,7 +499,7 @@ fn insert_illegal_games(connection: &Connection, illegal_games: Vec<ParsedGame>)
         let mut round = None;
         let mut white = None;
         let mut black = None;
-        for tag in game.tag_pairs {
+        for tag in game.parsed_game.tag_pairs {
             let tag_name_raw = tag.0.to_string();
             let tag_name = tag.0.to_string().to_lowercase();
             let tag_value = tag.1.to_string();
@@ -486,7 +516,17 @@ fn insert_illegal_games(connection: &Connection, illegal_games: Vec<ParsedGame>)
             }
         }
 
-        let params = (game_id, event, site, date, round, white, black);
+        let params = (
+            game_id,
+            event,
+            site,
+            date,
+            round,
+            white,
+            black,
+            game.illegal_move_number,
+            game.fen_at_illegal_move,
+        );
         if let Err(err) = insert_game.execute(params) {
             error!("Failed to insert illegal_games into the database. Inner error: {err}");
             return Err(());
@@ -502,7 +542,7 @@ fn insert_illegal_games(connection: &Connection, illegal_games: Vec<ParsedGame>)
             }
         }
 
-        for (move_number, move_) in game.moves.into_iter().enumerate() {
+        for (move_number, move_) in game.parsed_game.moves.into_iter().enumerate() {
             if global_move_number != 0 {
                 insert_moves_stmt.push(',');
             }
@@ -602,7 +642,13 @@ fn insert_illegal_games(connection: &Connection, illegal_games: Vec<ParsedGame>)
 
 struct ProcessedTables {
     legal_games: Vec<FullyPopulatedBoardRowModel>,
-    illegal_games: Vec<ParsedGame>,
+    illegal_games: Vec<IllegalMoveRowModel>,
+}
+
+struct IllegalMoveRowModel {
+    illegal_move_number: usize,
+    parsed_game: ParsedGame,
+    fen_at_illegal_move: String,
 }
 
 struct FullyPopulatedBoardRowModel {
@@ -625,7 +671,6 @@ struct FullyPopulatedMoveRowModel {
     is_castle_kingside: bool,
     is_castle_queenside: bool,
     piece: Option<PieceKind>,
-    fen_before: String,
     fen_after: String,
     acn: String,
 }
