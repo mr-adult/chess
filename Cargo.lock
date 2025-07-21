@@ -943,6 +943,7 @@ dependencies = [
  "clap",
  "codespan-reporting",
  "env_logger",
+ "iso_8859_1_encoder",
  "log",
  "rusqlite",
 ]

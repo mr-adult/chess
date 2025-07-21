@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [profile.release]
-debug = true
+lto = true
 
 [dependencies]
 clap = { version = "4.5.41", features = ["cargo"] }
@@ -15,3 +15,4 @@ chess_parsers = { path = "../parsers" }
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 chess_core = { workspace = true }
 chess_common = { workspace = true }
+iso_8859_1_encoder = { workspace = true }

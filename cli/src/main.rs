@@ -12,6 +12,7 @@ use codespan_reporting::{
         termcolor::{ColorChoice, StandardStream},
     },
 };
+use iso_8859_1_encoder::Iso8859String;
 use log::error;
 use rusqlite::{Connection, Error};
 
@@ -56,7 +57,8 @@ fn create_command() -> Command {
                     .help("the file where the sqlite database should be created"),
             )
             .arg(
-                Arg::new("pgn files")
+                Arg::last(Arg::new("pgn files"), true)
+                .num_args(1..)
                     .required(true)
                     .help("the pgn files to be loaded into the sqlite"),
             ),
@@ -84,18 +86,20 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                 return Err(());
             }
             Ok(mut file) => {
-                let mut pgn = String::new();
-                if let Err(err) = file.read_to_string(&mut pgn) {
+                let mut pgn = Vec::new();
+                if let Err(err) = file.read_to_end(&mut pgn) {
                     error!("Failed to read {file_name}. Inner error: {err}");
                     return Err(());
                 }
 
-                let parsed_pgn = chess_parsers::parse_pgn(pgn.as_bytes());
+                let pgn = Iso8859String::from_bytes(pgn);
+                let pgn_string = pgn.to_string();
+                let parsed_pgn = chess_parsers::parse_pgn(&pgn.as_bytes());
 
                 match parsed_pgn {
                     Err(err) => {
                         let mut files = SimpleFiles::new();
-                        let file_id = files.add(file_name, pgn.clone());
+                        let file_id = files.add(file_name, &pgn_string);
 
                         let writer = StandardStream::stderr(ColorChoice::Always);
                         let config = codespan_reporting::term::Config::default();
@@ -104,7 +108,7 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                             PgnErr::Byte(byte_err) => {
                                 let mut start = byte_err.location().byte_index();
                                 let mut end = start;
-                                if end < (pgn.len() - 1) {
+                                if end < (pgn_string.len() - 1) {
                                     end += 1;
                                 } else if start > 0 {
                                     start -= 1;
@@ -130,7 +134,7 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                                     file_id,
                                     match token_err.found() {
                                         None => {
-                                            let end = pgn.len();
+                                            let end = pgn_string.len();
                                             let mut start = end;
                                             if start > 0 {
                                                 start -= 1;
