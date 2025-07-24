@@ -1,10 +1,6 @@
 use iso_8859_1_encoder::{Iso8859String, Iso8859TranscodeErr};
 use std::{
-    error::Error,
-    fmt::{Debug, Display},
-    iter::{Cloned, Enumerate, Peekable},
-    ops::Range,
-    slice::Iter,
+    default, error::Error, fmt::{Debug, Display}, iter::{Cloned, Enumerate, Peekable}, ops::Range, slice::Iter
 };
 
 use crate::acn_parser::{parse_algebraic_notation, PieceMove};
@@ -140,12 +136,14 @@ impl Into<Iso8859String> for &ParsedGame {
     }
 }
 
-#[derive(Debug)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum GameResult {
-    WhiteWin,
-    BlackWin,
-    Draw,
-    Inconclusive,
+    WhiteWin = 1,
+    BlackWin = 2,
+    Draw = 3,
+    #[default]
+    Inconclusive = 4,
 }
 
 impl AsRef<str> for GameResult {
@@ -155,6 +153,42 @@ impl AsRef<str> for GameResult {
             GameResult::BlackWin => "0-1",
             GameResult::Draw => "1/2-1/2",
             GameResult::Inconclusive => "*",
+        }
+    }
+}
+
+impl TryFrom<&str> for GameResult {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "1-0" => Ok(Self::WhiteWin),
+            "0-1" => Ok(Self::BlackWin),
+            "1/2-1/2" => Ok(Self::Draw),
+            "*" => Ok(Self::Inconclusive),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<&String> for GameResult {
+    type Error = ();
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<u8> for GameResult {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::WhiteWin),
+            2 => Ok(Self::BlackWin),
+            3 => Ok(Self::Draw),
+            4 => Ok(Self::Inconclusive),
+            _ => Err(()),
         }
     }
 }

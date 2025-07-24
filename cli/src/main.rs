@@ -2,7 +2,7 @@ use std::{fs::OpenOptions, io::Read, process::ExitCode};
 
 use chess_common::{File, PieceKind, Player, Rank};
 use chess_core::{AcnMoveErr, Board};
-use chess_parsers::{Check, ParsedGame, PgnErr, PieceMoveKind};
+use chess_parsers::{Check, GameResult, ParsedGame, PgnErr, PieceMoveKind};
 use clap::{command, Arg, Command};
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -58,7 +58,7 @@ fn create_command() -> Command {
             )
             .arg(
                 Arg::last(Arg::new("pgn files"), true)
-                .num_args(1..)
+                    .num_args(1..)
                     .required(true)
                     .help("the pgn files to be loaded into the sqlite"),
             ),
@@ -192,8 +192,27 @@ fn initialize_sqlite_db(conn: &Connection) -> Result<(), Error> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "journal_mode", "wal")?;
 
+    create_pieces_table(conn)?;
+    create_results_table(conn)?;
+
+    create_games_table(conn)?;
+    create_tags_table(conn)?;
+    create_moves_table(conn)?;
+
+    create_illegal_games_table(conn)?;
+    create_illegal_games_tags_table(conn)?;
+    create_illegal_games_moves_table(conn)?;
+
+    Ok(())
+}
+
+fn create_pieces_table(conn: &Connection) -> Result<(), Error> {
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS pieces (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL);",
+        r#"
+CREATE TABLE IF NOT EXISTS pieces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    value TEXT NOT NULL
+);"#,
         [],
     )?;
 
@@ -217,21 +236,65 @@ fn initialize_sqlite_db(conn: &Connection) -> Result<(), Error> {
     insert_stmt.push_str(&inserts);
 
     conn.execute(&insert_stmt, [])?;
+    Ok(())
+}
 
+fn create_results_table(conn: &Connection) -> Result<(), Error> {
+    conn.execute(
+        r#"
+CREATE TABLE IF NOT EXISTS results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pgn TEXT NOT NULL,
+    meaning TEXT NOT NULL
+);"#,
+        [],
+    )?;
+
+    let inserts = [
+        GameResult::WhiteWin,
+        GameResult::BlackWin,
+        GameResult::Draw,
+        GameResult::Inconclusive,
+    ]
+    .into_iter()
+    .map(|result| format!("('{}', '{:?}')", result.as_ref(), result))
+    .collect::<Vec<_>>()
+    .join(",");
+
+    conn.execute(
+        &format!(
+            r#"
+INSERT INTO results (pgn, meaning)
+VALUES {};"#,
+            inserts
+        ),
+        [],
+    )?;
+
+    Ok(())
+}
+
+fn create_games_table(conn: &Connection) -> Result<(), Error> {
     conn.execute(
         r#"
 CREATE TABLE IF NOT EXISTS games (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    result INTEGER NOT NULL,
     event TEXT,
     site TEXT,
     date TEXT,
     round TEXT,
     white TEXT,
-    black TEXT
+    black TEXT,
+    FOREIGN KEY(result) REFERENCES results(id)
 );"#,
         [],
     )?;
 
+    Ok(())
+}
+
+fn create_tags_table(conn: &Connection) -> Result<(), Error> {
     conn.execute(
         r#"
 CREATE TABLE IF NOT EXISTS tags (
@@ -244,6 +307,10 @@ CREATE TABLE IF NOT EXISTS tags (
         [],
     )?;
 
+    Ok(())
+}
+
+fn create_moves_table(conn: &Connection) -> Result<(), Error> {
     conn.execute(
         r#"
 CREATE TABLE IF NOT EXISTS moves (
@@ -268,10 +335,15 @@ CREATE TABLE IF NOT EXISTS moves (
         [],
     )?;
 
+    Ok(())
+}
+
+fn create_illegal_games_table(conn: &Connection) -> Result<(), Error> {
     conn.execute(
         r#"
 CREATE TABLE IF NOT EXISTS illegal_games (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    result INTEGER NOT NULL,
     event TEXT,
     site TEXT,
     date TEXT,
@@ -279,11 +351,16 @@ CREATE TABLE IF NOT EXISTS illegal_games (
     white TEXT,
     black TEXT,
     illegal_move_number INTEGER NOT NULL,
-    fen_at_illegal_move TEXT NOT NULL
+    fen_at_illegal_move TEXT NOT NULL,
+    FOREIGN KEY(result) REFERENCES results(id)
 );"#,
         [],
     )?;
 
+    Ok(())
+}
+
+fn create_illegal_games_tags_table(conn: &Connection) -> Result<(), Error> {
     conn.execute(
         r#"
 CREATE TABLE IF NOT EXISTS illegal_game_tags (
@@ -296,6 +373,10 @@ CREATE TABLE IF NOT EXISTS illegal_game_tags (
         [],
     )?;
 
+    Ok(())
+}
+
+fn create_illegal_games_moves_table(conn: &Connection) -> Result<(), Error> {
     conn.execute(
         r#"
 CREATE TABLE IF NOT EXISTS illegal_game_moves (
@@ -382,6 +463,7 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
         let mut round = None;
         let mut white = None;
         let mut black = None;
+        let mut result = GameResult::Inconclusive;
         for tag in game.tag_pairs {
             let tag_name_raw = tag.0.to_string();
             let tag_name = tag.0.to_string().to_lowercase();
@@ -393,6 +475,9 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
                 "round" => round = Some(tag_value),
                 "white" => white = Some(tag_value),
                 "black" => black = Some(tag_value),
+                "result" => {
+                    result = GameResult::try_from(&tag_value).unwrap_or(GameResult::Inconclusive)
+                }
                 _ => {
                     uncategorized_tag_pairs.push((tag_name_raw, tag_value));
                 }
@@ -401,6 +486,7 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
 
         legal_games.push(FullyPopulatedBoardRowModel {
             event,
+            result: result as u8,
             site,
             date,
             round,
@@ -422,12 +508,19 @@ fn insert_legal_games(
     legal_games: Vec<FullyPopulatedBoardRowModel>,
 ) -> Result<(), ()> {
     let mut global_move_number = 0;
-    let mut insert_game = connection.prepare("INSERT INTO games (id, event, site, date, round, white, black) VALUES (?, ?, ?, ?, ?, ?, ?);").unwrap();
+    let mut insert_game = connection.prepare("INSERT INTO games (id, result, event, site, date, round, white, black) VALUES (?, ?, ?, ?, ?, ?, ?, ?);").unwrap();
     let mut insert_moves_stmt = "INSERT INTO moves (move_number, from_rank, from_file, to_rank, to_file, player, is_castle_kingside, is_castle_queenside, piece, fen_after, acn, game_id) VALUES ".to_string();
 
     for (game_id, game) in legal_games.into_iter().enumerate() {
         let params = (
-            game_id, game.event, game.site, game.date, game.round, game.white, game.black,
+            game_id,
+            game.result,
+            game.event,
+            game.site,
+            game.date,
+            game.round,
+            game.white,
+            game.black,
         );
         if let Err(err) = insert_game.execute(params) {
             error!("Failed to insert game into the database. Inner error: {err}");
@@ -492,7 +585,7 @@ fn insert_illegal_games(
     illegal_games: Vec<IllegalMoveRowModel>,
 ) -> Result<(), ()> {
     let mut global_move_number = 0;
-    let mut insert_game = connection.prepare("INSERT INTO illegal_games (id, event, site, date, round, white, black, illegal_move_number, fen_at_illegal_move) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);").unwrap();
+    let mut insert_game = connection.prepare("INSERT INTO illegal_games (id, result, event, site, date, round, white, black, illegal_move_number, fen_at_illegal_move) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);").unwrap();
     let mut insert_moves_stmt = "INSERT INTO illegal_game_moves (move_number, from_rank, from_file, to_rank, to_file, is_castle_kingside, is_castle_queenside, is_check, is_checkmate, piece, acn, game_id) VALUES ".to_string();
 
     for (game_id, game) in illegal_games.into_iter().enumerate() {
@@ -503,6 +596,7 @@ fn insert_illegal_games(
         let mut round = None;
         let mut white = None;
         let mut black = None;
+        let mut result = GameResult::Inconclusive;
         for tag in game.parsed_game.tag_pairs {
             let tag_name_raw = tag.0.to_string();
             let tag_name = tag.0.to_string().to_lowercase();
@@ -514,6 +608,7 @@ fn insert_illegal_games(
                 "round" => round = Some(tag_value),
                 "white" => white = Some(tag_value),
                 "black" => black = Some(tag_value),
+                "result" => result = GameResult::try_from(&tag_value).unwrap_or_default(),
                 _ => {
                     uncategorized_tag_pairs.push((tag_name_raw, tag_value));
                 }
@@ -522,6 +617,7 @@ fn insert_illegal_games(
 
         let params = (
             game_id,
+            result as u8,
             event,
             site,
             date,
@@ -664,6 +760,7 @@ struct FullyPopulatedBoardRowModel {
     black: Option<String>,
     other_tags: Vec<(String, String)>,
     moves: Vec<FullyPopulatedMoveRowModel>,
+    result: u8,
 }
 
 struct FullyPopulatedMoveRowModel {
