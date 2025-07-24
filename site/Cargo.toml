@@ -16,7 +16,7 @@ streaming-iterator = "0.1"
 
 # web
 http = "1.0"
-axum = "0.8.4"
+axum = { version = "0.8.4", features = ["macros"] }
 tower-http = { version = "0.5", features = ["cors", "fs"] }
 tower-cookies = { version = "0.10" }
 
@@ -47,3 +47,4 @@ rand = "0.8"
 hmac = "0.12"
 sha2 = "0.10"
 base64-url = "3.0"
+rusqlite = { version = "0.37.0", features = ["bundled"] }

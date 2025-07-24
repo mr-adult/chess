@@ -7,11 +7,14 @@ use axum::{
 use chess_core::Board;
 use chess_html::render_gameboard_full_page;
 use http::Method;
+use rusqlite::{Connection, Error};
 use tower_cookies::CookieManagerLayer;
 use tower_http::{
     cors::{Any, CorsLayer},
     services::{ServeDir, ServeFile},
 };
+
+use crate::chess_html::analysis_handler;
 
 mod api;
 mod chess_html;
@@ -34,6 +37,7 @@ async fn main() {
     // Set up the routes for our application
     let app = Router::new()
         .route("/", get(home))
+        .route("/analysis", get(analysis_handler))
         .nest_service("/api/v0", api::create_api_router())
         .nest_service("/html/v0", chess_html::create_ssr_router())
         .nest_service("/styles", ServeDir::new("src/styles"))
@@ -66,4 +70,8 @@ pub(crate) struct AppState {}
 
 async fn home(state: State<AppState>) -> Html<String> {
     render_gameboard_full_page(&Board::default())
+}
+
+fn open_db() -> Result<Connection, Error> {
+    Connection::open("../cli/openings.sqlite")
 }

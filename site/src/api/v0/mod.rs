@@ -11,7 +11,7 @@ use http::StatusCode;
 use serde::Deserialize;
 
 use crate::{
-    chess_html::render_gameboard,
+    chess_html::render_gameboard_with_history,
     common::{FenRequest, PerftRequest},
 };
 
@@ -81,7 +81,7 @@ async fn make_move_handler(req: Json<MakeMovesRequest>) -> Result<Html<String>, 
     board
         .make_move(req.move_.clone())
         .map_err(|_| StatusCode::BAD_REQUEST)?;
-    return Ok(render_gameboard(&board));
+    return Ok(render_gameboard_with_history(&board));
 }
 
 #[derive(Debug, Deserialize)]

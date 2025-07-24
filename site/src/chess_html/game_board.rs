@@ -19,43 +19,13 @@ pub(crate) fn render_gameboard_full_page(board: &Board) -> Html<String> {
         </head>
         <body>
             <div id="game_state_wrapper">
-                {render_gameboard(&board).0}
+                {render_gameboard_with_history(&board).0}
             </div>
         </body>
     })
 }
 
-pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
-    let ergo_board: PieceLocations = board.into();
-
-    let board_html = Rank::all_ranks_ascending().rev().map(|rank| {
-        let row = File::all_files_ascending()
-            .map(|file| {
-                let piece = ergo_board[&Location::new(file, rank)];
-                let is_light_square = (rank.as_int() + file.as_int()) % 2 != 0;
-                html!{
-                    <span class={
-                        if is_light_square {
-                            "board_square light"
-                        } else {
-                            "board_square dark"
-                        }
-                    } rank={rank.as_char()} file={file.as_char()}>
-                        <span class="column_centering piece_drag_target" rank={rank.as_char()} file={file.as_char()} draggable=true>
-                            {create_option_piece_svg(piece).0}
-                        </span>
-                    </span>
-                }
-            })
-            .collect::<String>();
-
-        html!{
-            <div class="rank" rank={rank.as_char()}>
-                {row}
-            </div>
-        }
-    }).collect::<String>();
-
+pub(crate) fn render_gameboard_with_history(board: &Board) -> Html<String> {
     let move_history_table = board.get_move_history_acn().into_iter().enumerate().fold(
         Vec::new(),
         |mut aggregate, (i, move_)| {
@@ -137,7 +107,7 @@ pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
     Html(html! {
         <div style="display: flex; flex-direction: row; justify-content: center; column-gap: 20px">
             <div id="game_board">
-                {board_html}
+                {render_gameboard(board).0}
             </div>
             <div id="initial_board_fen" style="display: none;">{board.starting_position().to_string()}</div>
             <div id="game_history">
@@ -155,4 +125,49 @@ pub(crate) fn render_gameboard(board: &Board) -> Html<String> {
             </textarea>
         </div>
     })
+}
+
+pub(crate) fn render_gameboard_without_history(board: &Board) -> Html<String> {
+    Html(html! {
+        <div id="chessBoard">
+            <div style="display: flex; flex-direction: row; justify-content: center; column-gap: 20px">
+                <div id="game_board" style="display: grid; grid-template-rows: repeat(8, 1fr); grid-template-columns: repeat(8, 1fr);">
+                    {render_gameboard(board).0}
+                </div>
+                <div id="initial_board_fen" style="display: none;">{board.starting_position().to_string()}</div>
+            </div>
+            <div style="text-align: center;">
+                <h5 style="margin-bottom: 5px;">"Current Position:"</h5>
+                <textarea readonly disabled id="game_fen" style="text-align: center; overflow: hidden; width: 400px; resize: none;">
+                    {board.to_fen_string()}
+                </textarea>
+            </div>
+        </div>
+    })
+}
+
+fn render_gameboard(board: &Board) -> Html<String> {
+    let ergo_board: PieceLocations = board.into();
+
+    Html(Rank::all_ranks_ascending().rev().map(|rank| {
+        File::all_files_ascending()
+            .map(|file| {
+                let piece = ergo_board[&Location::new(file, rank)];
+                let is_light_square = (rank.as_int() + file.as_int()) % 2 != 0;
+                html!{
+                    <span class={
+                        if is_light_square {
+                            "board_square light"
+                        } else {
+                            "board_square dark"
+                        }
+                    } rank={rank.as_char()} file={file.as_char()}>
+                        <span class="column_centering piece_drag_target" rank={rank.as_char()} file={file.as_char()} draggable=true>
+                            {create_option_piece_svg(piece).0}
+                        </span>
+                    </span>
+                }
+            })
+            .collect::<String>()
+    }).collect::<String>())
 }
