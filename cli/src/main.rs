@@ -158,7 +158,7 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                                 .with_label(Label::primary(file_id, span)),
                         };
 
-                        term::emit(&mut writer.lock(), &config, &files, &diagnostic).ok();
+                        term::emit_to_write_style(&mut writer.lock(), &config, &files, &diagnostic).ok();
                         return Err(());
                     }
                     Ok(pgn) => {
