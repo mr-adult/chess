@@ -333,7 +333,7 @@ fn insert_legal_games(
 
     for (game_id, game) in legal_games.into_iter().enumerate() {
         let params = (
-            game_id, game.event, game.site, game.date, game.round, game.white, game.black,
+            game_id as i64, game.event, game.site, game.date, game.round, game.white, game.black,
         );
         if let Err(err) = insert_game.execute(params) {
             error!("Failed to insert game into the database. Inner error: {err}");
@@ -343,7 +343,7 @@ fn insert_legal_games(
         for tag in game.other_tags {
             if let Err(err) = connection.execute(
                 "INSERT INTO tags (tag_name, tag_value, game_id) VALUES (?, ?, ?);",
-                (tag.0, tag.1, game_id),
+                (tag.0, tag.1, game_id as i64),
             ) {
                 error!("Failed to insert game tags into the database. Inner error: {err}");
                 return Err(());
@@ -427,14 +427,14 @@ fn insert_illegal_games(
         }
 
         let params = (
-            game_id,
+            game_id as i64,
             event,
             site,
             date,
             round,
             white,
             black,
-            game.illegal_move_number,
+            game.illegal_move_number as i64,
             game.fen_at_illegal_move,
         );
         if let Err(err) = insert_game.execute(params) {
@@ -445,7 +445,7 @@ fn insert_illegal_games(
         for tag in uncategorized_tag_pairs {
             if let Err(err) = connection.execute(
                 "INSERT INTO illegal_game_tags (tag_name, tag_value, game_id) VALUES (?, ?, ?);",
-                (tag.0, tag.1, game_id),
+                (tag.0, tag.1, game_id as i64),
             ) {
                 error!("Failed to insert game tags into the database. Inner error: {err}");
                 return Err(());

@@ -7,12 +7,12 @@ edition = "2021"
 lto = true
 
 [dependencies]
-clap = { version = "4.5.41", features = ["cargo"] }
-log = "0.4.26"
-env_logger = "0.11.8"
-codespan-reporting = "0.12.0"
+clap = { version = "=4.6.6", features = ["cargo"] }
+log = "=0.4.33"
+env_logger = "=0.11.11"
+codespan-reporting = "=0.13.1"
 chess_parsers = { path = "../parsers" }
-rusqlite = { version = "0.37.0", features = ["bundled"] }
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
 chess_core = { workspace = true }
 chess_common = { workspace = true }
 iso_8859_1_encoder = { workspace = true }

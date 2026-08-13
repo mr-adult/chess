@@ -12,24 +12,24 @@ chess_common = { workspace = true }
 chess_core = { workspace = true }
 chess_parsers = { workspace = true }
 
-streaming-iterator = "0.1"
+streaming-iterator = "=0.1.9"
 
 # web
-http = "1.0"
-axum = "0.8.4"
-tower-http = { version = "0.7.0", features = ["cors", "fs"] }
-tower-cookies = { version = "0.11.0" }
+http = "=1.5.0"
+axum = "=0.7.9"
+tower-http = { version = "=0.7.0", features = ["cors", "fs"] }
+tower-cookies = { version = "=0.11.0" }
 
 # async run time
-tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "=1.52.4", features = ["rt-multi-thread", "macros"] }
 
 # time handling
-chrono = "0.4"
+chrono = "=0.4.45"
 
 # HTML templating
-html-to-string-macro = "0.2"
+html-to-string-macro = "=0.2.5"
 
-uuid = { version = "1.8", features = [
+uuid = { version = "=1.24.0", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
@@ -37,13 +37,13 @@ uuid = { version = "1.8", features = [
 ] }
 
 # .env file interaction
-dotenvy = "0.15"
+dotenvy = "=0.15.7"
 
 # serialization/deserialization
 serde = { version = "1.0", features = ["derive"] }
 
 # encryption/encodings
-rand = "0.10.2"
-hmac = "0.13.0"
-sha2 = "0.11.0"
-base64-url = "3.0"
+rand = "=0.10.2"
+hmac = "=0.13.0"
+sha2 = "=0.11.0"
+base64-url = "=3.0.4"

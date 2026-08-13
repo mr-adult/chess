@@ -12,7 +12,7 @@ arr_deque = { workspace = true }
 iso_8859_1_encoder = { workspace = true }
 chess_common = { workspace = true }
 chess_parsers = { workspace = true }
-streaming-iterator = "0.1"
+streaming-iterator = "=0.1.9"
 
-serde = "1.0"
-serde_derive = "1.0"
+serde = "=1.0.229"
+serde_derive = "=1.0.229"
