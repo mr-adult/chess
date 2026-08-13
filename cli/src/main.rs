@@ -112,9 +112,15 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                                     .map(char::len_utf8)
                                     .unwrap_or(0);
                                 if end < (pgn_string.len() - 1) {
-                                    end += 1;
+                                    end += ch_len;
                                 } else if start > 0 {
-                                    start -= 1;
+                                    let ch_len = &pgn_string[..end]
+                                        .chars()
+                                        .rev()
+                                        .next()
+                                        .map(char::len_utf8)
+                                        .unwrap_or(0);
+                                    start -= ch_len;
                                 }
 
                                 let message = "Unexpected character.".to_string();
