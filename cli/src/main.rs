@@ -1,4 +1,12 @@
-use std::{fs::OpenOptions, io::Read, process::ExitCode};
+#![feature(portable_simd)]
+
+use std::{
+    borrow::Cow,
+    fs::OpenOptions,
+    io::Read,
+    process::ExitCode,
+    simd::{cmp::SimdPartialEq, u8x32},
+};
 
 use chess_common::{File, PieceKind, Player, Rank};
 use chess_core::{AcnMoveErr, Board};
@@ -12,7 +20,7 @@ use codespan_reporting::{
         termcolor::{ColorChoice, StandardStream},
     },
 };
-use log::error;
+use log::{error, info};
 use rusqlite::{Connection, Error};
 
 fn main() -> ExitCode {
@@ -223,6 +231,7 @@ fn initialize_sqlite_db(conn: &Connection) -> Result<(), Error> {
 
     let mut insert_stmt = "INSERT INTO pieces (id, value) VALUES ".to_string();
     insert_stmt.push_str(&inserts);
+    info!("{}", insert_stmt);
     conn.execute(&insert_stmt, [])?;
 
     Ok(())
@@ -279,6 +288,7 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
                 },
                 is_castle_kingside: matches!(move_.move_kind, PieceMoveKind::CastleKingside),
                 is_castle_queenside: matches!(move_.move_kind, PieceMoveKind::CastleQueenside),
+                check_kind: move_.check_kind.clone(),
             })
         }
 
@@ -289,6 +299,7 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
         let mut round = None;
         let mut white = None;
         let mut black = None;
+        let mut result = None;
         for tag in game.tag_pairs {
             let tag_name_raw = tag.0.to_string();
             let tag_name = tag.0.to_string().to_lowercase();
@@ -300,6 +311,7 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
                 "round" => round = Some(tag_value),
                 "white" => white = Some(tag_value),
                 "black" => black = Some(tag_value),
+                "result" => result = Some(tag_value),
                 _ => {
                     uncategorized_tag_pairs.push((tag_name_raw, tag_value));
                 }
@@ -313,6 +325,7 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
             round,
             white,
             black,
+            result,
             other_tags: uncategorized_tag_pairs,
             moves,
         });
@@ -328,67 +341,202 @@ fn insert_legal_games(
     connection: &Connection,
     legal_games: Vec<FullyPopulatedBoardRowModel>,
 ) -> Result<(), ()> {
-    let mut global_move_number = 0;
-    let mut insert_game = connection.prepare("INSERT INTO games (id, event, site, date, round, white, black) VALUES (?, ?, ?, ?, ?, ?, ?);").unwrap();
-    let mut insert_moves_stmt = "INSERT INTO moves (move_number, from_rank, from_file, to_rank, to_file, player, is_castle_kingside, is_castle_queenside, piece, fen_after, acn, game_id) VALUES ".to_string();
+    let mut buffers = [(0, String::new()), (0, String::new()), (0, String::new())];
 
-    for (game_id, game) in legal_games.into_iter().enumerate() {
-        let params = (
-            game_id as i64, game.event, game.site, game.date, game.round, game.white, game.black,
-        );
-        if let Err(err) = insert_game.execute(params) {
-            error!("Failed to insert game into the database. Inner error: {err}");
-            return Err(());
+    let mut iterator = legal_games.into_iter();
+
+    let mut done = false;
+    while !done {
+        let mut chunk = Vec::with_capacity(1000);
+
+        for _ in 0..1000 {
+            if let Some(next) = iterator.next() {
+                chunk.push(next);
+            } else {
+                done = true;
+                break;
+            }
         }
 
-        for tag in game.other_tags {
-            if let Err(err) = connection.execute(
-                "INSERT INTO tags (tag_name, tag_value, game_id) VALUES (?, ?, ?);",
-                (tag.0, tag.1, game_id as i64),
-            ) {
-                error!("Failed to insert game tags into the database. Inner error: {err}");
-                return Err(());
+        insert_legal_game_batch(connection, chunk, &mut buffers)?;
+    }
+
+    Ok(())
+}
+
+fn insert_legal_game_batch(
+    connection: &Connection,
+    batch: impl IntoIterator<Item = FullyPopulatedBoardRowModel>,
+    buffers: &mut [(usize, String); 3],
+) -> Result<(), ()> {
+    for buffer in buffers.iter_mut() {
+        buffer.1.clear();
+    }
+
+    let [(global_game_index, game_insert), (_, tag_insert), (_, move_insert)] = buffers;
+
+    game_insert.push_str("INSERT INTO games (id, event, site, date, round, white, black, result) VALUES ");
+    tag_insert.push_str("INSERT INTO tags (tag_name, tag_value, game_id) VALUES ");
+    move_insert.push_str("INSERT INTO moves (move_number, from_rank, from_file, to_rank, to_file, player, is_castle_kingside, is_castle_queenside, is_check, is_checkmate, piece, fen_after, acn, game_id) VALUES ");
+
+    let mut game_index = 0;
+    let mut tag_index = 0;
+    let mut move_index = 0;
+
+    for game in batch {
+        if game_index != 0 {
+            game_insert.push_str(", ");
+        }
+
+        game_insert.push('(');
+        {
+            game_insert.push_str(&global_game_index.to_string());
+
+            for string_param in [
+                game.event, game.site, game.date, game.round, game.white, game.black, game.result,
+            ]
+            .iter()
+            {
+                game_insert.push(',');
+
+                game_insert.push('\'');
+                game_insert.push_str(
+                    &string_param
+                        .as_ref()
+                        .map(|param| escape_sqlite_string_literal(&param))
+                        .unwrap_or(Cow::Borrowed("NULL")),
+                );
+                game_insert.push('\'');
             }
+        }
+        game_insert.push(')');
+        game_index += 1;
+
+        for tag in game.other_tags {
+            if tag_index != 0 {
+                tag_insert.push_str(", ");
+            }
+
+            tag_insert.push('(');
+
+            for tag_pair_piece in [tag.0, tag.1] {
+                tag_insert.push('\'');
+                tag_insert.push_str(&escape_sqlite_string_literal(&tag_pair_piece));
+                tag_insert.push('\'');
+                tag_insert.push(',');
+            }
+
+            tag_insert.push_str(&global_game_index.to_string());
+            tag_insert.push(')');
+            tag_index += 1;
         }
 
         for (move_number, move_) in game.moves.into_iter().enumerate() {
-            if global_move_number != 0 {
-                insert_moves_stmt.push(',');
+            if move_index != 0 {
+                move_insert.push(',');
             }
 
-            let insert_moves_line = &format!(
-                "({move_number},{},'{}',{},'{}','{}',{},{},{},'{}','{}',{game_id})",
-                move_.from_rank.as_int(),
-                move_.from_file.as_char(),
-                move_.to_rank.as_int(),
-                move_.to_file.as_char(),
-                match move_.player {
-                    Player::Black => "black",
-                    Player::White => "white",
-                },
-                if move_.is_castle_kingside { 1 } else { 0 },
-                if move_.is_castle_queenside { 1 } else { 0 },
-                match move_.piece.map(|piece| {
+            move_insert.push('(');
+            {
+                move_insert.push_str(&move_number.to_string());
+                move_insert.push(',');
+
+                move_insert.push_str(&move_.from_rank.as_int().to_string());
+                move_insert.push(',');
+
+                move_insert.push('\'');
+                move_insert.push(move_.from_file.as_char());
+                move_insert.push('\'');
+                move_insert.push(',');
+
+                move_insert.push_str(&move_.to_rank.as_int().to_string());
+                move_insert.push(',');
+
+                move_insert.push('\'');
+                move_insert.push(move_.to_file.as_char());
+                move_insert.push('\'');
+                move_insert.push(',');
+
+                move_insert.push_str(match move_.player {
+                    Player::Black => "'black'",
+                    Player::White => "'white'",
+                });
+                move_insert.push(',');
+
+                move_insert.push_str(&if move_.is_castle_kingside { 1 } else { 0 }.to_string());
+                move_insert.push(',');
+
+                move_insert.push_str(&if move_.is_castle_queenside { 1 } else { 0 }.to_string());
+                move_insert.push(',');
+
+                let is_check;
+                let is_checkmate;
+                match move_.check_kind {
+                    Check::None => {
+                        is_check = 0;
+                        is_checkmate = 0;
+                    }
+                    Check::Check => {
+                        is_check = 1;
+                        is_checkmate = 0;
+                    }
+                    Check::Mate => {
+                        is_check = 1;
+                        is_checkmate = 1;
+                    }
+                }
+
+                move_insert.push_str(&is_check.to_string());
+                move_insert.push(',');
+
+                move_insert.push_str(&is_checkmate.to_string());
+                move_insert.push(',');
+
+                move_insert.push_str(&match move_.piece.map(|piece| {
                     let piece_bit: u8 = piece as u8;
                     piece_bit
                 }) {
                     None => "NULL".to_string(),
                     Some(bit) => bit.to_string(),
-                },
-                move_.fen_after,
-                move_.acn,
-            );
+                });
+                move_insert.push(',');
 
-            insert_moves_stmt.push_str(&insert_moves_line);
-            global_move_number += 1;
+                move_insert.push('\'');
+                move_insert.push_str(&escape_sqlite_string_literal(&move_.fen_after));
+                move_insert.push('\'');
+                move_insert.push(',');
+
+                move_insert.push('\'');
+                move_insert.push_str(&escape_sqlite_string_literal(&move_.acn));
+                move_insert.push('\'');
+                move_insert.push(',');
+
+                move_insert.push_str(&global_game_index.to_string());
+            }
+            move_insert.push(')');
+
+            move_index += 1;
         }
+
+        *global_game_index += 1;
     }
 
-    if global_move_number != 0 {
-        if let Err(err) = connection.execute(&insert_moves_stmt, []) {
-            error!("Failed to insert moves into the database. Inner error: {err}");
-            return Err(());
-        }
+    info!("{}", game_index);
+    if let Err(err) = connection.execute(&game_insert, ()) {
+        error!("Failed to insert game into the database. Inner error: {err}");
+        return Err(());
+    }
+
+    info!("{}", tag_insert);
+    if let Err(err) = connection.execute(&tag_insert, ()) {
+        error!("Failed to insert game tags into the database. Inner error: {err}");
+        return Err(());
+    }
+
+    info!("{}", move_insert);
+    if let Err(err) = connection.execute(&move_insert, ()) {
+        error!("Failed to insert moves into the database. Inner error: {err}");
+        return Err(());
     }
 
     Ok(())
@@ -399,7 +547,7 @@ fn insert_illegal_games(
     illegal_games: Vec<IllegalMoveRowModel>,
 ) -> Result<(), ()> {
     let mut global_move_number = 0;
-    let mut insert_game = connection.prepare("INSERT INTO illegal_games (id, event, site, date, round, white, black, illegal_move_number, fen_at_illegal_move) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);").unwrap();
+    let mut insert_game = connection.prepare("INSERT INTO illegal_games (id, event, site, date, round, white, black, result, illegal_move_number, fen_at_illegal_move) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);").unwrap();
     let mut insert_moves_stmt = "INSERT INTO illegal_game_moves (move_number, from_rank, from_file, to_rank, to_file, is_castle_kingside, is_castle_queenside, is_check, is_checkmate, piece, acn, game_id) VALUES ".to_string();
 
     for (game_id, game) in illegal_games.into_iter().enumerate() {
@@ -410,6 +558,7 @@ fn insert_illegal_games(
         let mut round = None;
         let mut white = None;
         let mut black = None;
+        let mut result = None;
         for tag in game.parsed_game.tag_pairs {
             let tag_name_raw = tag.0.to_string();
             let tag_name = tag.0.to_string().to_lowercase();
@@ -421,6 +570,7 @@ fn insert_illegal_games(
                 "round" => round = Some(tag_value),
                 "white" => white = Some(tag_value),
                 "black" => black = Some(tag_value),
+                "result" => result = Some(tag_value),
                 _ => {
                     uncategorized_tag_pairs.push((tag_name_raw, tag_value));
                 }
@@ -435,6 +585,7 @@ fn insert_illegal_games(
             round,
             white,
             black,
+            result,
             game.illegal_move_number as i64,
             game.fen_at_illegal_move,
         );
@@ -562,6 +713,7 @@ struct IllegalMoveRowModel<'pgn> {
     fen_at_illegal_move: String,
 }
 
+#[derive(Debug)]
 struct FullyPopulatedBoardRowModel {
     event: Option<String>,
     site: Option<String>,
@@ -569,10 +721,12 @@ struct FullyPopulatedBoardRowModel {
     round: Option<String>,
     white: Option<String>,
     black: Option<String>,
+    result: Option<String>,
     other_tags: Vec<(String, String)>,
     moves: Vec<FullyPopulatedMoveRowModel>,
 }
 
+#[derive(Debug)]
 struct FullyPopulatedMoveRowModel {
     from_rank: Rank,
     from_file: File,
@@ -581,7 +735,97 @@ struct FullyPopulatedMoveRowModel {
     player: Player,
     is_castle_kingside: bool,
     is_castle_queenside: bool,
+    check_kind: Check,
     piece: Option<PieceKind>,
     fen_after: String,
     acn: String,
+}
+
+fn escape_sqlite_string_literal(contents: &str) -> Cow<'_, str> {
+    let bytes = contents.as_bytes();
+    let mut i = 0;
+    const SIMD_SIZE: usize = 32;
+    let needle = u8x32::splat(b'\'');
+    while i + SIMD_SIZE < bytes.len() {
+        let simd = u8x32::from_slice(&bytes[i..(i + SIMD_SIZE)]);
+        if needle.simd_eq(simd).any() {
+            return Cow::Owned(contents.replace('\'', "''"));
+        }
+
+        i += SIMD_SIZE;
+    }
+
+    for j in i..bytes.len() {
+        if bytes[j] == b'\'' {
+            return Cow::Owned(contents.replace('\'', "''"));
+        }
+    }
+
+    return Cow::Borrowed(contents);
+}
+
+#[test]
+fn test_escape() {
+    let test_cases: [(&str, Cow<'static, str>); 20] = [
+        // Inputs without single quotes use Cow::Borrowed.
+        ("", Cow::Borrowed("")),
+        ("plain text", Cow::Borrowed("plain text")),
+        // Inputs containing single quotes use Cow::Owned.
+        ("'", Cow::Owned("''".to_owned())),
+        ("a'b", Cow::Owned("a''b".to_owned())),
+        ("don't", Cow::Owned("don''t".to_owned())),
+        ("''", Cow::Owned("''''".to_owned())),
+        (
+            "O'Reilly's book",
+            Cow::Owned("O''Reilly''s book".to_owned()),
+        ),
+        (
+            "It''s already quoted",
+            Cow::Owned("It''''s already quoted".to_owned()),
+        ),
+        ("'leading quote", Cow::Owned("''leading quote".to_owned())),
+        ("trailing quote'", Cow::Owned("trailing quote''".to_owned())),
+        ("''both ends''", Cow::Owned("''''both ends''''".to_owned())),
+        (
+            "This string contains 'one' quoted phrase.",
+            Cow::Owned("This string contains ''one'' quoted phrase.".to_owned()),
+        ),
+        (
+            "She said, 'It's a test.'",
+            Cow::Owned("She said, ''It''s a test.''".to_owned()),
+        ),
+        ("''''", Cow::Owned("''''''''".to_owned())),
+        ("A'B'C'D'E", Cow::Owned("A''B''C''D''E".to_owned())),
+        (
+            "The user entered: 'DROP TABLE users;'",
+            Cow::Owned("The user entered: ''DROP TABLE users;''".to_owned()),
+        ),
+        (
+            "Line one'\nLine two'\nLine three'",
+            Cow::Owned("Line one''\nLine two''\nLine three''".to_owned()),
+        ),
+        (
+            "Apostrophes: ''' ''' '''",
+            Cow::Owned("Apostrophes: '''''' '''''' ''''''".to_owned()),
+        ),
+        (
+            "This is a long test string containing several apostrophes:\n\
+         Don't stop testing. John's value isn't equal to Mary's value,\n\
+         and the input includes 'quoted text' plus a final quote'.",
+            Cow::Owned(
+                "This is a long test string containing several apostrophes:\n\
+             Don''t stop testing. John''s value isn''t equal to Mary''s value,\n\
+             and the input includes ''quoted text'' plus a final quote''."
+                    .to_owned(),
+            ),
+        ),
+        (
+            "A string with no apostrophes at all",
+            Cow::Borrowed("A string with no apostrophes at all"),
+        ),
+    ];
+
+    for (input, expected_output) in test_cases {
+        assert_eq!(expected_output, escape_sqlite_string_literal(input));
+    }
 }

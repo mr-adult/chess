@@ -15,4 +15,3 @@ chess_parsers = { path = "../parsers" }
 rusqlite = { version = "=0.40.2", features = ["bundled"] }
 chess_core = { workspace = true }
 chess_common = { workspace = true }
-iso_8859_1_encoder = { workspace = true }

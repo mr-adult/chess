@@ -5,5 +5,6 @@ CREATE TABLE IF NOT EXISTS games (
     date TEXT,
     round TEXT,
     white TEXT,
-    black TEXT
+    black TEXT,
+    result TEXT
 );

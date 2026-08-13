@@ -531,29 +531,29 @@ pub struct Extras {
 
 #[derive(Logos, Debug, PartialEq)]
 #[logos(extras = Extras)]
-#[logos(skip(r"[ \t\r]", skip_callback))]
-#[logos(skip(r#"\n"#, newline_callback))]
+#[logos(skip(r"[ \t\r]+"))]
+#[logos(skip(r#"\n"#))]
 pub enum PgnTokenKind<'s> {
-    #[token("[", advance_token)]
+    #[token("[")]
     LeftSquareBracket,
-    #[token("]", advance_token)]
+    #[token("]")]
     RightSquareBracket,
-    #[token("<", advance_token)]
+    #[token("<")]
     LeftAngleBracket,
-    #[token(">", advance_token)]
+    #[token(">")]
     RightAngleBracket,
-    #[token("(", advance_token)]
+    #[token("(")]
     LeftParen,
-    #[token(")", advance_token)]
+    #[token(")")]
     RightParen,
-    #[token(".", advance_token)]
+    #[token(".")]
     Period,
     /// Numeric Annotation Glyph
     #[regex(r#"\$\d+"#, nag_callback)]
     NAG(&'s str),
-    #[regex(r#""(?:[^"\\]|\\["\\])*?""#, get_slice_callback)]
+    #[regex(r#""(?:[^"]|\\["\\])*?""#, |lex| &lex.slice()[1..(lex.slice().len() - 1)])]
     String(&'s str),
-    #[regex(r#"\d+"#, |lex| lex.slice(), priority = 3)]
+    #[regex(r#"\d+"#, get_slice_callback, priority = 3)]
     Integer(&'s str),
     #[regex(r#"[a-zA-Z0-9][a-zA-Z0-9_+#=:\-]+"#, get_slice_callback, priority = 2)]
     Symbol(&'s str),
@@ -563,29 +563,13 @@ pub enum PgnTokenKind<'s> {
     #[token("1/2-1/2", get_slice_callback)]
     #[token("0.5-0.5", get_slice_callback)]
     GameTermination(&'s str),
-    #[regex(r#"(?:;.*?\n)|(?:\{[^\}]*\})"#, get_slice_callback)]
+    #[regex(r#"(?:;.*?\n)|(?:\{[^}]*?\})"#, get_slice_callback)]
     Comment(&'s str),
     #[regex(r#"%.*?\n"#, get_slice_callback)]
     EscapedLine(&'s str),
 }
 
-fn advance_token<'pgn>(lex: &mut Lexer<'pgn, PgnTokenKind<'pgn>>) {
-    lex.extras.column += lex.slice().len();
-}
-
-fn newline_callback<'pgn>(lex: &mut Lexer<'pgn, PgnTokenKind<'pgn>>) -> Skip {
-    lex.extras.line += 1;
-    lex.extras.column = 0;
-    Skip
-}
-
-fn skip_callback<'pgn>(lex: &mut Lexer<'pgn, PgnTokenKind<'pgn>>) -> Skip {
-    lex.extras.column += lex.slice().len();
-    Skip
-}
-
 fn nag_callback<'pgn>(lex: &mut Lexer<'pgn, PgnTokenKind<'pgn>>) -> &'pgn str {
-    lex.extras.column += lex.slice().len();
     &lex.slice()['$'.len_utf8()..]
 }
 
