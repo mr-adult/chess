@@ -12,7 +12,6 @@ use codespan_reporting::{
         termcolor::{ColorChoice, StandardStream},
     },
 };
-use iso_8859_1_encoder::Iso8859String;
 use log::error;
 use rusqlite::{Connection, Error};
 
@@ -86,15 +85,14 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                 return Err(());
             }
             Ok(mut file) => {
-                let mut pgn = Vec::new();
-                if let Err(err) = file.read_to_end(&mut pgn) {
+                let mut pgn = String::new();
+                if let Err(err) = file.read_to_string(&mut pgn) {
                     error!("Failed to read {file_name}. Inner error: {err}");
                     return Err(());
                 }
 
-                let pgn = Iso8859String::from_bytes(pgn);
                 let pgn_string = pgn.to_string();
-                let parsed_pgn = chess_parsers::parse_pgn(&pgn.as_bytes());
+                let parsed_pgn = chess_parsers::parse_pgn(&pgn);
 
                 match parsed_pgn {
                     Err(err) => {
@@ -105,24 +103,21 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                         let config = codespan_reporting::term::Config::default();
 
                         let diagnostic = match err {
-                            PgnErr::Byte(byte_err) => {
-                                let mut start = byte_err.location().byte_index();
+                            PgnErr::UnexpectedCharacter(char_err) => {
+                                let mut start = char_err.location().byte_index();
                                 let mut end = start;
+                                let ch_len = &pgn_string[start..]
+                                    .chars()
+                                    .next()
+                                    .map(char::len_utf8)
+                                    .unwrap_or(0);
                                 if end < (pgn_string.len() - 1) {
                                     end += 1;
                                 } else if start > 0 {
                                     start -= 1;
                                 }
 
-                                let mut message =
-                                    "Unexpected character. Expected one of ".to_string();
-                                for (i, expected) in byte_err.expected().iter().enumerate() {
-                                    if i != 0 {
-                                        message.push_str(", ");
-                                    }
-                                    message.push(*expected);
-                                }
-                                message.push('.');
+                                let message = "Unexpected character.".to_string();
 
                                 Diagnostic::error()
                                     .with_message(&message)
@@ -132,7 +127,7 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                                 .with_message("unexpected token")
                                 .with_label(Label::primary(
                                     file_id,
-                                    match token_err.found() {
+                                    match token_err.found_span() {
                                         None => {
                                             let end = pgn_string.len();
                                             let mut start = end;
@@ -142,7 +137,7 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
 
                                             start..end
                                         }
-                                        Some(token) => token.range(),
+                                        Some(span) => span.into(),
                                     },
                                 )),
                             PgnErr::InvalidAlgebraicChessNotation { span, value } => {
@@ -154,7 +149,7 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                             }
                             PgnErr::InvalidTagName { span, tag } => Diagnostic::error()
                                 .with_message(&format!("invalid tag name '{tag}'"))
-                                .with_label(Label::primary(file_id, &span)),
+                                .with_label(Label::primary(file_id, span)),
                         };
 
                         term::emit(&mut writer.lock(), &config, &files, &diagnostic).ok();
@@ -550,14 +545,14 @@ fn insert_illegal_games(
     Ok(())
 }
 
-struct ProcessedTables {
+struct ProcessedTables<'pgn> {
     legal_games: Vec<FullyPopulatedBoardRowModel>,
-    illegal_games: Vec<IllegalMoveRowModel>,
+    illegal_games: Vec<IllegalMoveRowModel<'pgn>>,
 }
 
-struct IllegalMoveRowModel {
+struct IllegalMoveRowModel<'pgn> {
     illegal_move_number: usize,
-    parsed_game: ParsedGame,
+    parsed_game: ParsedGame<'pgn>,
     fen_at_illegal_move: String,
 }
 

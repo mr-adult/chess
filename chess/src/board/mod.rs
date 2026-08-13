@@ -1130,9 +1130,9 @@ impl Board {
         layout.to_string()
     }
 
-    pub fn to_pgn(&self) -> Iso8859String {
+    pub fn to_pgn(&self) -> String {
         let pgn: ParsedGame = self.into();
-        (&pgn).into()
+        (&pgn).to_string()
     }
 }
 
@@ -1179,8 +1179,8 @@ impl Into<PieceLocations> for &Board {
     }
 }
 
-impl Into<ParsedGame> for &Board {
-    fn into(self) -> ParsedGame {
+impl Into<ParsedGame<'static>> for &Board {
+    fn into(self) -> ParsedGame<'static> {
         let result = if self.is_check_mate() {
             match self.player_to_move() {
                 Player::White => GameResult::BlackWin,

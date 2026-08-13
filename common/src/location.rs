@@ -1,5 +1,3 @@
-use std::vec::IntoIter;
-
 use crate::{file::File, rank::Rank, Player};
 use arr_deque::ArrDeque;
 use serde_derive::{Deserialize, Serialize};
