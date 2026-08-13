@@ -22,6 +22,17 @@ impl PieceKind {
             Self::King => 'K',
         }
     }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            PieceKind::Pawn => "pawn",
+            PieceKind::Knight => "knight",
+            PieceKind::Bishop => "bishop",
+            PieceKind::Rook => "rook",
+            PieceKind::Queen => "queen",
+            PieceKind::King => "king",
+        }
+    }
 }
 
 impl TryFrom<char> for PieceKind {
@@ -41,13 +52,6 @@ impl TryFrom<char> for PieceKind {
 
 impl ToString for PieceKind {
     fn to_string(&self) -> String {
-        match self {
-            PieceKind::Pawn => "pawn",
-            PieceKind::Knight => "knight",
-            PieceKind::Bishop => "bishop",
-            PieceKind::Rook => "rook",
-            PieceKind::Queen => "queen",
-            PieceKind::King => "king",
-        }.to_string()
+        self.as_str().to_string()
     }
 }
