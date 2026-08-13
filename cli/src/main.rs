@@ -192,10 +192,17 @@ fn initialize_sqlite_db(conn: &Connection) -> Result<(), Error> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "journal_mode", "wal")?;
 
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS pieces (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL);",
-        [],
-    )?;
+    for create in [
+        include_str!("../sql/create_pieces.sql"),
+        include_str!("../sql/create_games.sql"),
+        include_str!("../sql/create_tags.sql"),
+        include_str!("../sql/create_moves.sql"),
+        include_str!("../sql/create_illegal_games.sql"),
+        include_str!("../sql/create_illegal_tags.sql"),
+        include_str!("../sql/create_illegal_moves.sql"),
+    ] {
+        conn.execute(create, ())?;
+    }
 
     let inserts = [
         PieceKind::Pawn,
@@ -215,108 +222,7 @@ fn initialize_sqlite_db(conn: &Connection) -> Result<(), Error> {
 
     let mut insert_stmt = "INSERT INTO pieces (id, value) VALUES ".to_string();
     insert_stmt.push_str(&inserts);
-
     conn.execute(&insert_stmt, [])?;
-
-    conn.execute(
-        r#"
-CREATE TABLE IF NOT EXISTS games (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event TEXT,
-    site TEXT,
-    date TEXT,
-    round TEXT,
-    white TEXT,
-    black TEXT
-);"#,
-        [],
-    )?;
-
-    conn.execute(
-        r#"
-CREATE TABLE IF NOT EXISTS tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tag_name TEXT NOT NULL,
-    tag_value TEXT NOT NULL,
-    game_id INTEGER NOT NULL,
-    FOREIGN KEY(game_id) REFERENCES games(id)
-);"#,
-        [],
-    )?;
-
-    conn.execute(
-        r#"
-CREATE TABLE IF NOT EXISTS moves (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    move_number INTEGER NOT NULL,
-    from_rank INTEGER check(from_rank BETWEEN 1 AND 8),
-    from_file TEXT check(from_file IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')),
-    to_rank INTEGER check(to_rank BETWEEN 1 AND 8),
-    to_file TEXT check(to_file IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')),
-    player TEXT check(player = 'white' OR player = 'black'),
-    is_castle_kingside INTEGER check(is_castle_kingside BETWEEN 0 AND 1),
-    is_castle_queenside INTEGER check(is_castle_queenside BETWEEN 0 AND 1),
-    is_check INTEGER check(is_check BETWEEN 0 AND 1),
-    is_checkmate INTEGER check(is_checkmate BETWEEN 0 AND 1),
-    piece INT,
-    fen_after TEXT NOT NULL,
-    acn TEXT NOT NULL,
-    game_id INTEGER NOT NULL,
-    FOREIGN KEY(game_id) REFERENCES games(id),
-    FOREIGN KEY(piece) REFERENCES pieces(id)
-);"#,
-        [],
-    )?;
-
-    conn.execute(
-        r#"
-CREATE TABLE IF NOT EXISTS illegal_games (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event TEXT,
-    site TEXT,
-    date TEXT,
-    round TEXT,
-    white TEXT,
-    black TEXT,
-    illegal_move_number INTEGER NOT NULL,
-    fen_at_illegal_move TEXT NOT NULL
-);"#,
-        [],
-    )?;
-
-    conn.execute(
-        r#"
-CREATE TABLE IF NOT EXISTS illegal_game_tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tag_name TEXT NOT NULL,
-    tag_value TEXT NOT NULL,
-    game_id INTEGER NOT NULL,
-    FOREIGN KEY(game_id) REFERENCES illegal_games(id)
-);"#,
-        [],
-    )?;
-
-    conn.execute(
-        r#"
-CREATE TABLE IF NOT EXISTS illegal_game_moves (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    move_number INTEGER NOT NULL,
-    from_rank INTEGER check(from_rank BETWEEN 1 AND 8 OR from_rank IS NULL),
-    from_file TEXT check(from_file IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h') OR from_file IS NULL),
-    to_rank INTEGER check(to_rank BETWEEN 1 AND 8 OR to_rank IS NULL),
-    to_file TEXT check(to_file IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h') OR to_file IS NULL),
-    is_castle_kingside INTEGER check(is_castle_kingside BETWEEN 0 AND 1),
-    is_castle_queenside INTEGER check(is_castle_queenside BETWEEN 0 AND 1),
-    is_check INTEGER check(is_check BETWEEN 0 AND 1),
-    is_checkmate INTEGER check(is_check BETWEEN 0 AND 1),
-    piece INT,
-    acn TEXT NOT NULL,
-    game_id INTEGER NOT NULL,
-    FOREIGN KEY(game_id) REFERENCES games(id),
-    FOREIGN KEY(piece) REFERENCES pieces(id)
-);"#,
-        [],
-    )?;
 
     Ok(())
 }

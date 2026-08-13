@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_name TEXT NOT NULL,
+    tag_value TEXT NOT NULL,
+    game_id INTEGER NOT NULL,
+    FOREIGN KEY(game_id) REFERENCES games(id)
+);
