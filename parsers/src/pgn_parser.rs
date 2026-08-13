@@ -1,4 +1,4 @@
-use logos::{Lexer, Logos, Skip};
+use logos::{Lexer, Logos};
 use std::{
     error::Error,
     fmt::{Debug, Display},
@@ -305,7 +305,7 @@ impl<'pgn> PgnParser<'pgn> {
             {}
             self.match_token_if(|token| matches!(token, PgnTokenKind::Integer(_)));
             while self
-                .match_token_if(|token| matches!(token, PgnTokenKind::Comment(_)))
+                .match_token_if(|token: &PgnTokenKind<'_>| matches!(token, PgnTokenKind::Comment(_)))
                 .is_some()
             {}
             while self
@@ -662,24 +662,5 @@ mod tests {
         for game in PgnParser::parse_pgn(pgn).unwrap() {
             println!("{:#?}", game);
         }
-    }
-}
-
-#[test]
-fn test() {
-    use std::fs::OpenOptions;
-    use std::io::Read;
-    let mut buf = String::new();
-    OpenOptions::new()
-        .read(true)
-        .write(false)
-        .open("C:/Users/ad4mb/Downloads/lichess_db_broadcast_2026-07.pgn")
-        .map(|mut file| file.read_to_string(&mut buf))
-        .flatten()
-        .unwrap();
-
-    let games = PgnParser::parse_pgn(&buf).unwrap();
-    for game in games {
-        println!("{:#?}", game);
     }
 }

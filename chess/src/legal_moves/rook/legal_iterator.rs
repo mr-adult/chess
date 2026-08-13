@@ -1,5 +1,3 @@
-use std::vec;
-
 use arr_deque::ArrDeque;
 use chess_common::Location;
 

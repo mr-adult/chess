@@ -129,6 +129,20 @@ pub enum Check {
     Mate,
 }
 
+impl Check {
+    pub fn states() -> [Check; 3] {
+        [Check::None, Check::Check, Check::Mate]
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Check::None => "non-check",
+            Check::Check => "check",
+            Check::Mate => "mate",
+        }
+    }
+}
+
 pub(crate) struct ACNParser;
 impl ACNParser {
     /// This method is currently unsafe outside of the pgn parser

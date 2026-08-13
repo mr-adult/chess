@@ -1,7 +1,6 @@
 mod acn_move_err;
 pub use acn_move_err::AcnMoveErr;
 mod move_err;
-use iso_8859_1_encoder::Iso8859String;
 use move_err::MoveErr;
 mod undoable_move;
 use streaming_iterator::StreamingIterator;
@@ -124,6 +123,7 @@ impl Board {
         #[cfg(not(debug_assertions))]
         return;
 
+        #[allow(unused)]
         for (i, bitboard_1) in self.all_bitboards().enumerate() {
             for (j, bitboard_2) in self.all_bitboards().enumerate() {
                 if bitboard_1 as *const BitBoard == bitboard_2 as *const BitBoard {

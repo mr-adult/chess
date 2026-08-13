@@ -7,7 +7,7 @@ pub use fen::{BoardLayout, FenErr, PieceLocations};
 mod acn_parser;
 pub use acn_parser::{parse_algebraic_notation, Check, NormalMove, PieceMove, PieceMoveKind};
 
-pub fn parse_pgn(pgn: &str) -> Result<Vec<ParsedGame>, PgnErr> {
+pub fn parse_pgn(pgn: &str) -> Result<Vec<ParsedGame<'_>>, PgnErr<'_>> {
     PgnParser::parse_pgn(pgn)
 }
 

@@ -20,15 +20,16 @@ use codespan_reporting::{
         termcolor::{ColorChoice, StandardStream},
     },
 };
-use log::{error, info};
+use log::{error, info, warn};
 use rusqlite::{Connection, Error};
 
 fn main() -> ExitCode {
     env_logger::init();
 
     let matches = create_command().get_matches();
+    let subcommand = matches.subcommand();
 
-    match matches.subcommand() {
+    match subcommand {
         Some(("load", args)) => {
             let sqlite_db = args
                 .get_one::<String>("destination sqlite file")
@@ -65,7 +66,7 @@ fn create_command() -> Command {
             )
             .arg(
                 Arg::last(Arg::new("pgn files"), true)
-                .num_args(1..)
+                    .num_args(1..)
                     .required(true)
                     .help("the pgn files to be loaded into the sqlite"),
             ),
@@ -166,7 +167,8 @@ fn handle_load_subcommand(sqlite_db: &str, files: Vec<&String>) -> Result<(), ()
                                 .with_label(Label::primary(file_id, span)),
                         };
 
-                        term::emit_to_write_style(&mut writer.lock(), &config, &files, &diagnostic).ok();
+                        term::emit_to_write_style(&mut writer.lock(), &config, &files, &diagnostic)
+                            .ok();
                         return Err(());
                     }
                     Ok(pgn) => {
@@ -250,10 +252,34 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
             let selected_move = match board.make_move_acn(&move_.to_string()) {
                 Ok(selected_move) => selected_move,
                 Err(AcnMoveErr::CheckStateMismatch(selected_move)) => {
-                    if i == game.moves.len() - 1 {
+                    let mut altered_move = move_.clone();
+                    let mut legal_alternative = None;
+                    for check in Check::states() {
+                        if check == move_.check_kind {
+                            continue;
+                        }
+
+                        altered_move.check_kind = check;
+                        match board.make_move_acn(&altered_move.to_string()) {
+                            Ok(selected_move) => {
+                                legal_alternative = Some(selected_move);
+                                break;
+                            }
+                            Err(AcnMoveErr::CheckStateMismatch(_)) => continue,
+                            Err(_) => continue,
+                        }
+                    }
+
+                    if let Some(alternative) = legal_alternative {
+                        warn!("Incorrect chess notation: check state mismatch. Expected {}, but got {}.", move_.check_kind.as_str(), altered_move.check_kind.as_str());
+                        alternative
+                    } else if i == game.moves.len() - 1 {
+                        error!("Illegal move: check notation mismatched expectation.");
+                        // This is the last move, so even if we can't verify it, we aren't
+                        // relying on shaky data or board state.
                         selected_move
                     } else {
-                        error!("Illegal move: check state mismatch");
+                        error!("Illegal move: check notation mismatched expectation.");
                         illegal_games.push(IllegalMoveRowModel {
                             parsed_game: game,
                             illegal_move_number: i,
@@ -263,7 +289,7 @@ fn process_tables(parsed_games: Vec<ParsedGame>) -> ProcessedTables {
                     }
                 }
                 Err(err) => {
-                    error!("Illegal move: {err:?}");
+                    error!("Illegal move: tried to make move `{}` in board state `{}`. Error message: {err:?}", move_.to_string(), board.to_fen_string());
                     illegal_games.push(IllegalMoveRowModel {
                         parsed_game: game,
                         illegal_move_number: i,
@@ -375,7 +401,8 @@ fn insert_legal_game_batch(
 
     let [(global_game_index, game_insert), (_, tag_insert), (_, move_insert)] = buffers;
 
-    game_insert.push_str("INSERT INTO games (id, event, site, date, round, white, black, result) VALUES ");
+    game_insert
+        .push_str("INSERT INTO games (id, event, site, date, round, white, black, result) VALUES ");
     tag_insert.push_str("INSERT INTO tags (tag_name, tag_value, game_id) VALUES ");
     move_insert.push_str("INSERT INTO moves (move_number, from_rank, from_file, to_rank, to_file, player, is_castle_kingside, is_castle_queenside, is_check, is_checkmate, piece, fen_after, acn, game_id) VALUES ");
 
@@ -393,7 +420,13 @@ fn insert_legal_game_batch(
             game_insert.push_str(&global_game_index.to_string());
 
             for string_param in [
-                game.event, game.site, game.date, game.round, game.white, game.black, game.result,
+                game.event,
+                game.site,
+                game.date,
+                game.round,
+                game.white,
+                game.black,
+                game.result,
             ]
             .iter()
             {

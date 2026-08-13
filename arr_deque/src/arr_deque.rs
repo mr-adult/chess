@@ -178,7 +178,7 @@ impl<T, const N: usize> ArrDeque<T, N> {
         Ok(())
     }
 
-    pub fn iter(&self) -> Iter<T, N> {
+    pub fn iter(&self) -> Iter<'_, T, N> {
         Iter {
             deque: self,
             indexes: self.active_indexes(),
