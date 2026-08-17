@@ -17,17 +17,14 @@ pub enum File {
 
 pub type FilesIterator = IntoIter<File, 8>;
 impl File {
-    #[inline]
     pub const fn castle_kingside_destination() -> Self {
         Self::g
     }
 
-    #[inline]
     pub const fn castle_queenside_destination() -> Self {
         Self::c
     }
 
-    #[inline]
     pub const fn king_starting() -> Self {
         Self::e
     }
@@ -98,72 +95,58 @@ impl File {
         }
     }
 
-    #[inline]
     pub const fn a_through_d_bit_filter() -> u64 {
         Self::a_or_b_bit_filter() | Self::c_or_d_bit_filter()
     }
 
-    #[inline]
     pub const fn e_through_h_bit_filter() -> u64 {
         Self::e_or_f_bit_filter() | Self::g_or_h_bit_filter()
     }
 
-    #[inline]
     pub const fn a_or_b_bit_filter() -> u64 {
         Self::a_bit_filter() | Self::b_bit_filter()
     }
 
-    #[inline]
     pub const fn c_or_d_bit_filter() -> u64 {
         Self::c_bit_filter() | Self::d_bit_filter()
     }
 
-    #[inline]
     pub const fn e_or_f_bit_filter() -> u64 {
         Self::e_bit_filter() | Self::f_bit_filter()
     }
 
-    #[inline]
     pub const fn g_or_h_bit_filter() -> u64 {
         Self::g_bit_filter() | Self::h_bit_filter()
     }
 
-    #[inline]
     pub const fn a_bit_filter() -> u64 {
         0x01_01_01_01_01_01_01_01
     }
 
-    #[inline]
     pub const fn b_bit_filter() -> u64 {
         0x02_02_02_02_02_02_02_02
     }
 
-    #[inline]
     pub const fn c_bit_filter() -> u64 {
         0x04_04_04_04_04_04_04_04
     }
 
-    #[inline]
     pub const fn d_bit_filter() -> u64 {
         0x08_08_08_08_08_08_08_08
     }
 
-    #[inline]
     pub const fn e_bit_filter() -> u64 {
         0x10_10_10_10_10_10_10_10
     }
 
-    #[inline]
     pub const fn f_bit_filter() -> u64 {
         0x20_20_20_20_20_20_20_20
     }
 
-    #[inline]
     pub const fn g_bit_filter() -> u64 {
         0x40_40_40_40_40_40_40_40
     }
 
-    #[inline]
     pub const fn h_bit_filter() -> u64 {
         0x80_80_80_80_80_80_80_80
     }

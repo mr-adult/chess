@@ -373,7 +373,6 @@ impl Location {
 impl TryFrom<u64> for Location {
     type Error = ();
 
-    #[inline]
     fn try_from(value: u64) -> Result<Self, Self::Error> {
         match value {
             0x0000000000000001 => Ok(Location::new(File::a, Rank::One)),

@@ -91,7 +91,6 @@ impl Rank {
         }
     }
 
-    #[inline]
     pub const fn one_through_four_bit_filter() -> u64 {
         Rank::one_bit_filter()
             | Rank::two_bit_filter()
@@ -99,7 +98,6 @@ impl Rank {
             | Rank::four_bit_filter()
     }
 
-    #[inline]
     pub const fn five_through_eight_bit_filter() -> u64 {
         Rank::five_bit_filter()
             | Rank::six_bit_filter()
@@ -107,62 +105,50 @@ impl Rank {
             | Rank::eight_bit_filter()
     }
 
-    #[inline]
     pub const fn one_or_two_bit_filter() -> u64 {
         Rank::one_bit_filter() | Rank::two_bit_filter()
     }
 
-    #[inline]
     pub const fn three_or_four_bit_filter() -> u64 {
         Rank::three_bit_filter() | Rank::four_bit_filter()
     }
 
-    #[inline]
     pub const fn five_or_six_bit_filter() -> u64 {
         Rank::five_bit_filter() | Rank::six_bit_filter()
     }
 
-    #[inline]
     pub const fn seven_or_eight_bit_filter() -> u64 {
         Rank::seven_bit_filter() | Rank::eight_bit_filter()
     }
 
-    #[inline]
     pub const fn one_bit_filter() -> u64 {
         0x00_00_00_00_00_00_00_FF
     }
 
-    #[inline]
     pub const fn two_bit_filter() -> u64 {
         0x00_00_00_00_00_00_FF_00
     }
 
-    #[inline]
     pub const fn three_bit_filter() -> u64 {
         0x00_00_00_00_00_FF_00_00
     }
 
-    #[inline]
     pub const fn four_bit_filter() -> u64 {
         0x00_00_00_00_FF_00_00_00
     }
 
-    #[inline]
     pub const fn five_bit_filter() -> u64 {
         0x00_00_00_FF_00_00_00_00
     }
 
-    #[inline]
     pub const fn six_bit_filter() -> u64 {
         0x00_00_FF_00_00_00_00_00
     }
 
-    #[inline]
     pub const fn seven_bit_filter() -> u64 {
         0x00_FF_00_00_00_00_00_00
     }
 
-    #[inline]
     pub const fn eight_bit_filter() -> u64 {
         0xFF_00_00_00_00_00_00_00
     }

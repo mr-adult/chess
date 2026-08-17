@@ -118,7 +118,6 @@ impl Board {
         self.mailbox = BitBoard::new(result);
     }
 
-    #[inline]
     pub(crate) fn assert_board_integrity(&self) {
         #[cfg(not(debug_assertions))]
         return;

@@ -54,12 +54,10 @@ impl BitBoard {
         Self::new(self.0.wrapping_shr(7) & !File::a_bit_filter())
     }
 
-    #[inline]
     pub(crate) fn intersects_with(&self, other: &BitBoard) -> bool {
         self.intersects_with_u64(other.0)
     }
 
-    #[inline]
     pub(crate) fn intersects_with_u64(&self, other: u64) -> bool {
         (self.0 & other) != 0
     }
