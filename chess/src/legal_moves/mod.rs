@@ -25,8 +25,7 @@ pub struct LegalMovesIterator<'board> {
     bishop_moves_iterator: Option<LegalBishopMovesIterator<'board>>,
     rook_moves_iterator: Option<LegalRookMovesIterator<'board>>,
     queen_moves_iterator: Option<LegalQueenMovesIterator<'board>>,
-    king_moves_iterator: LegalKingMovesIterator<'board>,
-    king_moves_iterator_finished: bool,
+    king_moves_iterator: Option<LegalKingMovesIterator<'board>>,
     check_blocking_squares: Option<ArrDeque<Location, 8>>,
     king_protecting_squares: Option<ArrDeque<(Location, ArrDeque<Location, 7>), 8>>,
 }
@@ -42,8 +41,7 @@ impl<'board> LegalMovesIterator<'board> {
             bishop_moves_iterator: Some(LegalBishopMovesIterator::new(&board)),
             rook_moves_iterator: Some(LegalRookMovesIterator::new(board)),
             queen_moves_iterator: Some(LegalQueenMovesIterator::new(board)),
-            king_moves_iterator: LegalKingMovesIterator::new(board, player_to_move),
-            king_moves_iterator_finished: false,
+            king_moves_iterator: Some(LegalKingMovesIterator::new(board, player_to_move)),
             check_blocking_squares: None,
             king_protecting_squares: None,
         }
@@ -112,9 +110,9 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
             return None;
         }
 
-        if !self.king_moves_iterator_finished {
-            match self.king_moves_iterator.next() {
-                None => self.king_moves_iterator_finished = true,
+        if let Some(king_moves_iterator) = self.king_moves_iterator.as_mut() {
+            match king_moves_iterator.next() {
+                None => self.king_moves_iterator = None,
                 Some(move_) => return Some(PossibleMove::Normal { move_ }),
             }
         }
