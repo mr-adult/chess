@@ -85,8 +85,7 @@ impl<'board> Iterator for LegalBishopMovesIterator<'board> {
 
                     return Some(Move {
                         from: current_bishop_data.from_location.clone(),
-                        to: Location::try_from(to_location.0)
-                            .expect(Location::failed_from_usize_message()),
+                        to: Location::expect_from(to_location.0)
                     });
                 }
             }

@@ -57,8 +57,7 @@ impl<'board> CheckStoppingSquaresIterator<'board> {
             player_to_move: player_to_move.as_index(),
             target_square: target,
             #[cfg(debug_assertions)]
-            target_square_location: Location::try_from(target)
-                .expect(Location::failed_from_usize_message()),
+            target_square_location: Location::expect_from(target),
             pawn_moves: match player_to_move {
                 Player::White => [target_bb.up_left(), target_bb.up_right()].into_iter(),
                 Player::Black => [target_bb.down_left(), target_bb.down_right()].into_iter(),
@@ -86,7 +85,7 @@ impl<'board> CheckStoppingSquaresIterator<'board> {
     fn resolve_into_result<const N: usize>(&mut self, values: ArrDeque<BitBoard, N>) -> bool {
         let locations = values
             .into_iter()
-            .map(|bb| Location::try_from(bb.0).expect(Location::failed_from_usize_message()))
+            .map(|bb| Location::expect_from(bb.0))
             .collect::<ArrDeque<_, 7>>();
 
         if self.result.is_empty() {

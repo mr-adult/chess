@@ -173,10 +173,10 @@ impl<'board> Iterator for LegalMovesIterator<'board> {
                                 if loc.as_u64() == en_passant_target_pawn.0 {
                                     match self.player {
                                         Player::White => {
-                                            assert!(new_targets.push_back(Location::try_from(en_passant_target_pawn.up().0).expect(Location::failed_from_usize_message())).is_ok());
+                                            assert!(new_targets.push_back(Location::expect_from(en_passant_target_pawn.up().0)).is_ok());
                                         }
                                         Player::Black => {
-                                            assert!(new_targets.push_back(Location::try_from(en_passant_target_pawn.down().0).expect(Location::failed_from_usize_message())).is_ok());
+                                            assert!(new_targets.push_back(Location::expect_from(en_passant_target_pawn.down().0)).is_ok());
                                         }
                                     }
                                 }

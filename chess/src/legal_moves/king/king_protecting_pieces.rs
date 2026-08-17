@@ -48,8 +48,7 @@ impl<'board> KingProtectingLocationsIterator<'board> {
             board,
             player_to_move: player_to_move.as_index(),
             #[cfg(debug_assertions)]
-            target_square_location: Location::try_from(target)
-                .expect(Location::failed_from_usize_message()),
+            target_square_location: Location::expect_from(target),
             diagonal_moves: bishop_moves_iters,
             straight_moves: rook_moves_iters,
             friendly_mailbox: board.create_mailbox_for_player(player_to_move),
@@ -105,13 +104,11 @@ impl<'board> Iterator for KingProtectingLocationsIterator<'board> {
                         let ok = so_far.push_back(bishop_move.0);
                         debug_assert!(ok.is_ok());
                         let result = self.result.push_back((
-                            Location::try_from(friendly.0)
-                                .expect(Location::failed_from_usize_message()),
+                            Location::expect_from(friendly.0),
                             so_far
                                 .into_iter()
                                 .map(|bb| {
-                                    Location::try_from(bb)
-                                        .expect(Location::failed_from_usize_message())
+                                    Location::expect_from(bb)
                                 })
                                 .collect(),
                         ));
@@ -153,12 +150,10 @@ impl<'board> Iterator for KingProtectingLocationsIterator<'board> {
                         assert!(self
                             .result
                             .push_back((
-                                Location::try_from(friendly.0)
-                                    .expect(Location::failed_from_usize_message()),
+                                Location::expect_from(friendly.0),
                                 so_far
                                     .into_iter()
-                                    .map(|bb| Location::try_from(bb)
-                                        .expect(Location::failed_from_usize_message()))
+                                    .map(|bb| Location::expect_from(bb))
                                     .collect()
                             ))
                             .is_ok());

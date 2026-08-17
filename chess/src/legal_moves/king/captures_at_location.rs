@@ -49,8 +49,7 @@ impl<'board> LegalCapturesAtLocationIterator<'board> {
         ]
         .into_iter();
 
-        let target_square_location =
-            Location::try_from(target).expect(Location::failed_from_usize_message());
+        let target_square_location = Location::expect_from(target);
 
         Self {
             board,
@@ -95,8 +94,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
             while let Some(attacking_pawn_square) = self.pawn_moves.next() {
                 if self.board.pawns[self.player_to_move].intersects_with(&attacking_pawn_square) {
                     return Some(Move {
-                        from: Location::try_from(attacking_pawn_square.0)
-                            .expect(Location::failed_from_usize_message()),
+                        from: Location::expect_from(attacking_pawn_square.0),
                         to: self.target_square_location.clone(),
                     });
                 }
@@ -110,8 +108,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                 if self.board.knights[self.player_to_move].intersects_with(&attacking_knight_square)
                 {
                     return Some(Move {
-                        from: Location::try_from(attacking_knight_square.0)
-                            .expect(Location::failed_from_usize_message()),
+                        from: Location::expect_from(attacking_knight_square.0),
                         to: self.target_square_location.clone(),
                     });
                 }
@@ -126,8 +123,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     || self.board.queens[self.player_to_move].intersects_with(&diagonal_move)
                 {
                     return Some(Move {
-                        from: Location::try_from(diagonal_move.0)
-                            .expect(Location::failed_from_usize_message()),
+                        from: Location::expect_from(diagonal_move.0),
                         to: self.target_square_location.clone(),
                     });
                 }
@@ -148,8 +144,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
                     || self.board.queens[self.player_to_move].intersects_with(&straight_move)
                 {
                     return Some(Move {
-                        from: Location::try_from(straight_move.0)
-                            .expect(Location::failed_from_usize_message()),
+                        from: Location::expect_from(straight_move.0),
                         to: self.target_square_location.clone(),
                     });
                 }
@@ -168,8 +163,7 @@ impl<'board> Iterator for LegalCapturesAtLocationIterator<'board> {
             while let Some(king_move) = self.king_moves.next() {
                 if self.board.kings[self.player_to_move].intersects_with(&king_move) {
                     return Some(Move {
-                        from: Location::try_from(king_move.0)
-                            .expect(Location::failed_from_usize_message()),
+                        from: Location::expect_from(king_move.0),
                         to: self.target_square_location.clone(),
                     });
                 }

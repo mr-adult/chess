@@ -368,6 +368,10 @@ impl Location {
     pub const fn as_u64(&self) -> u64 {
         self.file.bit_filter() & self.rank.bit_filter()
     }
+
+    pub fn expect_from(value: u64) -> Self {
+        Self::try_from(value).expect(Self::failed_from_usize_message())
+    }
 }
 
 impl TryFrom<u64> for Location {
@@ -468,11 +472,11 @@ mod tests {
     fn try_from_gets_correct_locations() {
         assert_eq!(
             Location::new(File::a, Rank::Three),
-            Location::try_from(File::a_bit_filter() & Rank::three_bit_filter()).unwrap()
+            Location::expect_from(File::a_bit_filter() & Rank::three_bit_filter())
         );
         assert_eq!(
             Location::new(File::g, Rank::Seven),
-            Location::try_from(File::g_bit_filter() & Rank::seven_bit_filter()).unwrap()
+            Location::expect_from(File::g_bit_filter() & Rank::seven_bit_filter())
         );
     }
 }

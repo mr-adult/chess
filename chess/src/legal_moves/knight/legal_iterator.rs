@@ -47,8 +47,7 @@ impl<'board> Iterator for LegalKnightMovesIterator<'board> {
                     .lookahead
                     .push_back(Move {
                         from: location.clone(),
-                        to: Location::try_from(knight_move.0)
-                            .expect(Location::failed_from_usize_message()),
+                        to: Location::expect_from(knight_move.0),
                     })
                     .is_ok());
             }

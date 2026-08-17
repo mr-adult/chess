@@ -915,12 +915,11 @@ impl Board {
 
             return UndoableMove::EnPassant {
                 move_: selected_move.take_move(),
-                captured_pawn_location: Location::try_from(real_pawn_location.0)
-                    .expect(Location::failed_from_usize_message()),
+                captured_pawn_location: Location::expect_from(real_pawn_location.0)
             };
         }
 
-        let to_location = Location::try_from(to).expect(Location::failed_from_usize_message());
+        let to_location = Location::expect_from(to);
         if let Some(captured_piece) = self.at(&to_location) {
             let to_rank = move_.to.rank();
             if piece_to_move.kind() == PieceKind::Pawn
@@ -955,8 +954,8 @@ impl Board {
             }
             PieceKind::King => {
                 let from_loc =
-                    Location::try_from(from).expect(Location::failed_from_usize_message());
-                let to_loc = Location::try_from(to).expect(Location::failed_from_usize_message());
+                    Location::expect_from(from);
+                let to_loc = Location::expect_from(to);
 
                 if (from_loc.file().as_int() - to_loc.file().as_int()).abs() == 2 {
                     let castle_rank =

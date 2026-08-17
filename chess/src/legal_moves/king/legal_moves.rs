@@ -87,9 +87,8 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             }
 
             return Some(Move {
-                from: Location::try_from(king_bitboard.0)
-                    .expect(Location::failed_from_usize_message()),
-                to: Location::try_from(king_move.0).expect(Location::failed_from_usize_message()),
+                from: Location::expect_from(king_bitboard.0),
+                to: Location::expect_from(king_move.0),
             });
         }
 
@@ -133,8 +132,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     && !Self::is_check(self.board, self.player, to_loc.as_u64())
                 {
                     return Some(Move {
-                        from: Location::try_from(self.king_bitboard.0)
-                            .expect(Location::failed_from_usize_message()),
+                        from: Location::expect_from(self.king_bitboard.0),
                         to: to_loc,
                     });
                 }
@@ -163,8 +161,7 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                     && !Self::is_check(self.board, self.player, to_loc.as_u64())
                 {
                     return Some(Move {
-                        from: Location::try_from(self.king_bitboard.0)
-                            .expect(Location::failed_from_usize_message()),
+                        from: Location::expect_from(self.king_bitboard.0),
                         to: to_loc,
                     });
                 }

@@ -49,8 +49,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                         {
                             let result = self.lookahead.push_back(Move {
                                 from: location.clone(),
-                                to: Location::try_from(new_location_double.0)
-                                    .expect(Location::failed_from_usize_message()),
+                                to: Location::expect_from(new_location_double.0),
                             });
                             debug_assert!(result.is_ok());
                         }
@@ -70,9 +69,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                         {
                             let result = self.lookahead.push_back(Move {
                                 from: location.clone(),
-                                to: Location::try_from(capture_square.0).expect(
-                                    "Conversion of capture square to location should never fail",
-                                ),
+                                to: Location::expect_from(capture_square.0),
                             });
                             debug_assert!(result.is_ok());
                         }
@@ -81,7 +78,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                     if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox) {
                         return Some(Move {
                             from: location,
-                            to: Location::try_from(new_location.0).unwrap(),
+                            to: Location::expect_from(new_location.0),
                         });
                     }
 
@@ -101,8 +98,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                         {
                             let result = self.lookahead.push_back(Move {
                                 from: location.clone(),
-                                to: Location::try_from(new_location_double.0)
-                                    .expect(Location::failed_from_usize_message()),
+                                to: Location::expect_from(new_location_double.0),
                             });
                             debug_assert!(result.is_ok());
                         }
@@ -122,9 +118,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                         {
                             let result = self.lookahead.push_back(Move {
                                 from: location.clone(),
-                                to: Location::try_from(capture_square.0).expect(
-                                    "Conversion of capture square to location should never fail",
-                                ),
+                                to: Location::expect_from(capture_square.0),
                             });
                             debug_assert!(result.is_ok());
                         }
@@ -133,8 +127,7 @@ impl<'board> Iterator for LegalPawnMovesIterator<'board> {
                     if new_location.0 != 0 && !new_location.intersects_with(&self.board.mailbox) {
                         return Some(Move {
                             from: location,
-                            to: Location::try_from(new_location.0)
-                                .expect(Location::failed_from_usize_message()),
+                            to: Location::expect_from(new_location.0),
                         });
                     }
 
