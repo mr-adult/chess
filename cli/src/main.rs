@@ -31,6 +31,8 @@ fn main() -> ExitCode {
 
     match subcommand {
         Some(("load", args)) => {
+            let now = std::time::Instant::now();
+
             let sqlite_db = args
                 .get_one::<String>("destination sqlite file")
                 .expect("'destination sqlite file' is required");
@@ -41,8 +43,10 @@ fn main() -> ExitCode {
                 .collect::<Vec<_>>();
 
             if handle_load_subcommand(sqlite_db, files).is_ok() {
+                eprintln!("Finished in {} seconds", now.elapsed().as_secs());
                 return ExitCode::SUCCESS;
             } else {
+                eprintln!("Finished in {} seconds", now.elapsed().as_secs());
                 return ExitCode::FAILURE;
             }
         }
