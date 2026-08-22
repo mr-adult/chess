@@ -2,6 +2,7 @@ use std::{
     array::from_fn,
     fmt::Debug,
     ops::{BitAnd, BitOr, BitXor},
+    simd::Simd,
 };
 
 use chess_common::{File, Rank};
@@ -14,6 +15,16 @@ pub(crate) struct BitBoard(
 );
 
 impl BitBoard {
+    pub(crate) const LEFT_DIR_RIGHT_SHIFT_OFFSET: u32 = 1;
+    pub(crate) const UP_LEFT_DIR_LEFT_SHIFT_OFFSET: u32 = 7;
+    pub(crate) const UP_DIR_LEFT_SHIFT_OFFSET: u32 = 8;
+    pub(crate) const UP_RIGHT_DIR_LEFT_SHIFT_OFFSET: u32 = 9;
+
+    pub(crate) const RIGHT_DIR_LEFT_SHIFT_OFFSET: u32 = 1;
+    pub(crate) const DOWN_RIGHT_DIR_RIGHT_SHIFT_OFFSET: u32 = 7;
+    pub(crate) const DOWN_DIR_RIGHT_SHIFT_OFFSET: u32 = 8;
+    pub(crate) const DOWN_LEFT_DIR_RIGHT_SHIFT_OFFSET: u32 = 9;
+
     pub(crate) fn new(value: u64) -> Self {
         BitBoard(
             value,
@@ -23,42 +34,108 @@ impl BitBoard {
     }
 
     pub(crate) fn left(&self) -> Self {
-        Self::new(self.0.wrapping_shr(1) & !File::h_bit_filter())
+        Self::new(Self::left_u64(self.0))
+    }
+    pub(crate) fn left_u64(value: u64) -> u64 {
+        value.unbounded_shr(Self::LEFT_DIR_RIGHT_SHIFT_OFFSET) & !File::h_bit_filter()
+    }
+    pub(crate) fn simd_left<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value >> Simd::<u64, N>::splat(Self::LEFT_DIR_RIGHT_SHIFT_OFFSET as u64)
+            & Self::bitwise_not_h_bit_filter_simd()
+    }
+    pub(crate) const fn bitwise_not_h_bit_filter_simd<const N: usize>() -> Simd<u64, N> {
+        Simd::<u64, N>::splat(!File::h_bit_filter())
     }
 
     pub(crate) fn right(&self) -> Self {
-        Self::new(self.0.wrapping_shl(1) & !File::a_bit_filter())
+        Self::new(Self::right_u64(self.0))
+    }
+    pub(crate) fn right_u64(value: u64) -> u64 {
+        value.unbounded_shl(Self::RIGHT_DIR_LEFT_SHIFT_OFFSET) & !File::a_bit_filter()
+    }
+    pub(crate) fn simd_right<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value << Simd::<u64, N>::splat(Self::RIGHT_DIR_LEFT_SHIFT_OFFSET as u64)
+            & Self::bitwise_not_a_bit_filter_simd()
+    }
+    pub(crate) const fn bitwise_not_a_bit_filter_simd<const N: usize>() -> Simd<u64, N> {
+        Simd::<u64, N>::splat(!File::a_bit_filter())
     }
 
     pub(crate) fn up(&self) -> Self {
-        Self::new(self.0.wrapping_shl(8))
+        Self::new(Self::up_u64(self.0))
+    }
+    pub(crate) fn up_u64(value: u64) -> u64 {
+        value.unbounded_shl(Self::UP_DIR_LEFT_SHIFT_OFFSET)
+    }
+    pub(crate) fn simd_up<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value << Simd::<u64, N>::splat(Self::UP_DIR_LEFT_SHIFT_OFFSET as u64)
+            & Simd::<u64, N>::splat(!Rank::one_bit_filter())
     }
 
     pub(crate) fn down(&self) -> Self {
-        Self::new(self.0.wrapping_shr(8))
+        Self::new(Self::down_u64(self.0))
+    }
+    pub(crate) fn down_u64(value: u64) -> u64 {
+        value.unbounded_shr(Self::DOWN_DIR_RIGHT_SHIFT_OFFSET)
+    }
+    pub(crate) fn simd_down<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value >> Simd::<u64, N>::splat(Self::DOWN_DIR_RIGHT_SHIFT_OFFSET as u64)
+            & Simd::<u64, N>::splat(!Rank::eight_bit_filter())
     }
 
     pub(crate) fn up_left(&self) -> Self {
-        Self::new(self.0.wrapping_shl(7) & !File::h_bit_filter())
+        Self::new(Self::up_left_u64(self.0))
+    }
+    pub(crate) fn up_left_u64(value: u64) -> u64 {
+        value.unbounded_shl(Self::UP_LEFT_DIR_LEFT_SHIFT_OFFSET) & !File::h_bit_filter()
+    }
+    pub(crate) fn simd_up_left<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value << Simd::<u64, N>::splat(Self::UP_LEFT_DIR_LEFT_SHIFT_OFFSET as u64)
+            & Self::bitwise_not_h_bit_filter_simd()
+            & Simd::<u64, N>::splat(!Rank::one_bit_filter())
     }
 
     pub(crate) fn up_right(&self) -> Self {
-        Self::new(self.0.wrapping_shl(9) & !File::a_bit_filter())
+        Self::new(Self::up_right_u64(self.0))
+    }
+    pub(crate) fn up_right_u64(value: u64) -> u64 {
+        value.unbounded_shl(Self::UP_RIGHT_DIR_LEFT_SHIFT_OFFSET) & !File::a_bit_filter()
+    }
+    pub(crate) fn simd_up_right<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value << Simd::<u64, N>::splat(Self::UP_RIGHT_DIR_LEFT_SHIFT_OFFSET as u64)
+            & Self::bitwise_not_a_bit_filter_simd()
+            & Simd::<u64, N>::splat(!Rank::one_bit_filter())
     }
 
     pub(crate) fn down_left(&self) -> Self {
-        Self::new(self.0.wrapping_shr(9) & !File::h_bit_filter())
+        Self::new(Self::down_left_u64(self.0))
+    }
+    pub(crate) fn down_left_u64(value: u64) -> u64 {
+        value.unbounded_shr(Self::DOWN_LEFT_DIR_RIGHT_SHIFT_OFFSET) & !File::h_bit_filter()
+    }
+    pub(crate) fn simd_down_left<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value >> Simd::<u64, N>::splat(Self::DOWN_LEFT_DIR_RIGHT_SHIFT_OFFSET as u64)
+            & Self::bitwise_not_h_bit_filter_simd()
+            & Simd::<u64, N>::splat(!Rank::eight_bit_filter())
     }
 
     pub(crate) fn down_right(&self) -> Self {
-        Self::new(self.0.wrapping_shr(7) & !File::a_bit_filter())
+        Self::new(Self::down_right_u64(self.0))
+    }
+    pub(crate) fn down_right_u64(value: u64) -> u64 {
+        value.unbounded_shr(Self::DOWN_RIGHT_DIR_RIGHT_SHIFT_OFFSET) & !File::a_bit_filter()
+    }
+    pub(crate) fn simd_down_right<const N: usize>(value: Simd<u64, N>) -> Simd<u64, N> {
+        value >> Simd::<u64, N>::splat(Self::DOWN_RIGHT_DIR_RIGHT_SHIFT_OFFSET as u64)
+            & Self::bitwise_not_a_bit_filter_simd()
+            & Simd::<u64, N>::splat(!Rank::eight_bit_filter())
     }
 
     pub(crate) fn intersects_with(&self, other: &BitBoard) -> bool {
         self.intersects_with_u64(other.0)
     }
 
-    pub(crate) fn intersects_with_u64(&self, other: u64) -> bool {
+    pub(crate) const fn intersects_with_u64(&self, other: u64) -> bool {
         (self.0 & other) != 0
     }
 
