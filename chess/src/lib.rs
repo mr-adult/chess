@@ -1,3 +1,5 @@
+#![feature(portable_simd)]
+
 mod bitboard;
 mod board;
 mod iterative_deepening;

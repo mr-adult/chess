@@ -7,6 +7,7 @@ use streaming_iterator::StreamingIterator;
 use undoable_move::UndoableMove;
 
 use std::{
+    simd::{num::SimdUint, u64x4},
     str::FromStr,
     sync::{Arc, Mutex},
     thread::available_parallelism,
@@ -111,11 +112,34 @@ impl Board {
     /// one of the pieces changes position or a piece is added/removed
     /// from the board.
     fn update_mailbox(&mut self) {
-        let mut result = 0;
-        for bitboard in self.all_bitboards() {
-            result |= bitboard.0;
-        }
-        self.mailbox = BitBoard::new(result);
+        let bitboards = [
+            [
+                self.pawns[0].0,
+                self.pawns[1].0,
+                self.knights[0].0,
+                self.knights[1].0,
+            ],
+            [
+                self.bishops[0].0,
+                self.bishops[1].0,
+                self.rooks[0].0,
+                self.rooks[1].0,
+            ],
+            [
+                self.queens[0].0,
+                self.queens[1].0,
+                self.kings[0].0,
+                self.kings[1].0,
+            ],
+        ];
+
+        self.mailbox = BitBoard::new(
+            bitboards
+                .map(|group| u64x4::from_array(group).reduce_or())
+                .into_iter()
+                .reduce(|agg, item| item | agg)
+                .expect("The groups to be non-empty, so this will always be Some()."),
+        )
     }
 
     pub(crate) fn assert_board_integrity(&self) {
