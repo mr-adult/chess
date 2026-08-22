@@ -959,7 +959,7 @@ impl Board {
 
                 if (from_loc.file().as_int() - to_loc.file().as_int()).abs() == 2 {
                     let castle_rank =
-                        Rank::castle(&Player::try_from(player).expect("player to be valid"));
+                        Rank::castle(&Player::expect_from(player));
                     debug_assert!(castle_rank == to_loc.rank() && castle_rank == from_loc.rank());
 
                     if to_loc.file() == File::c {

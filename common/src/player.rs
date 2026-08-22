@@ -44,6 +44,10 @@ impl Player {
         debug_assert!(player < 2);
         (player + 1) % 2
     }
+
+    pub fn expect_from(value: usize) -> Player {
+        Self::try_from(value).expect("Player to be valid.")
+    }
 }
 
 impl TryFrom<usize> for Player {

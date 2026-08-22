@@ -9,6 +9,71 @@ pub struct Location {
 }
 
 impl Location {
+    pub const A1: u64 = 0x1;
+    pub const B1: u64 = 0x2;
+    pub const C1: u64 = 0x4;
+    pub const D1: u64 = 0x8;
+    pub const E1: u64 = 0x10;
+    pub const F1: u64 = 0x20;
+    pub const G1: u64 = 0x40;
+    pub const H1: u64 = 0x80;
+    pub const A2: u64 = 0x100;
+    pub const B2: u64 = 0x200;
+    pub const C2: u64 = 0x400;
+    pub const D2: u64 = 0x800;
+    pub const E2: u64 = 0x1000;
+    pub const F2: u64 = 0x2000;
+    pub const G2: u64 = 0x4000;
+    pub const H2: u64 = 0x8000;
+    pub const A3: u64 = 0x10000;
+    pub const B3: u64 = 0x20000;
+    pub const C3: u64 = 0x40000;
+    pub const D3: u64 = 0x80000;
+    pub const E3: u64 = 0x100000;
+    pub const F3: u64 = 0x200000;
+    pub const G3: u64 = 0x400000;
+    pub const H3: u64 = 0x800000;
+    pub const A4: u64 = 0x1000000;
+    pub const B4: u64 = 0x2000000;
+    pub const C4: u64 = 0x4000000;
+    pub const D4: u64 = 0x8000000;
+    pub const E4: u64 = 0x10000000;
+    pub const F4: u64 = 0x20000000;
+    pub const G4: u64 = 0x40000000;
+    pub const H4: u64 = 0x80000000;
+    pub const A5: u64 = 0x100000000;
+    pub const B5: u64 = 0x200000000;
+    pub const C5: u64 = 0x400000000;
+    pub const D5: u64 = 0x800000000;
+    pub const E5: u64 = 0x1000000000;
+    pub const F5: u64 = 0x2000000000;
+    pub const G5: u64 = 0x4000000000;
+    pub const H5: u64 = 0x8000000000;
+    pub const A6: u64 = 0x10000000000;
+    pub const B6: u64 = 0x20000000000;
+    pub const C6: u64 = 0x40000000000;
+    pub const D6: u64 = 0x80000000000;
+    pub const E6: u64 = 0x100000000000;
+    pub const F6: u64 = 0x200000000000;
+    pub const G6: u64 = 0x400000000000;
+    pub const H6: u64 = 0x800000000000;
+    pub const A7: u64 = 0x1000000000000;
+    pub const B7: u64 = 0x2000000000000;
+    pub const C7: u64 = 0x4000000000000;
+    pub const D7: u64 = 0x8000000000000;
+    pub const E7: u64 = 0x10000000000000;
+    pub const F7: u64 = 0x20000000000000;
+    pub const G7: u64 = 0x40000000000000;
+    pub const H7: u64 = 0x80000000000000;
+    pub const A8: u64 = 0x100000000000000;
+    pub const B8: u64 = 0x200000000000000;
+    pub const C8: u64 = 0x400000000000000;
+    pub const D8: u64 = 0x800000000000000;
+    pub const E8: u64 = 0x1000000000000000;
+    pub const F8: u64 = 0x2000000000000000;
+    pub const G8: u64 = 0x4000000000000000;
+    pub const H8: u64 = 0x8000000000000000;
+
     pub const fn new(file: File, rank: Rank) -> Self {
         Self { file, rank }
     }
@@ -28,327 +93,327 @@ impl Location {
 
     pub fn from_bitboard(bitboard: u64) -> ArrDeque<Location, 64> {
         if bitboard & u64::MAX == 0 {
-            return ArrDeque::new()
+            return ArrDeque::new();
         }
 
         let mut arr_deque = ArrDeque::new();
 
-        if bitboard & 0x1 != 0 {
+        if bitboard & Location::A1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x2 != 0 {
+        if bitboard & Location::B1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x4 != 0 {
+        if bitboard & Location::C1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x8 != 0 {
+        if bitboard & Location::D1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x10 != 0 {
+        if bitboard & Location::E1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x20 != 0 {
+        if bitboard & Location::F1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x40 != 0 {
+        if bitboard & Location::G1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x80 != 0 {
+        if bitboard & Location::H1 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::One))
                 .is_ok());
         }
-        if bitboard & 0x100 != 0 {
+        if bitboard & Location::A2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x200 != 0 {
+        if bitboard & Location::B2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x400 != 0 {
+        if bitboard & Location::C2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x800 != 0 {
+        if bitboard & Location::D2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x1000 != 0 {
+        if bitboard & Location::E2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x2000 != 0 {
+        if bitboard & Location::F2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x4000 != 0 {
+        if bitboard & Location::G2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x8000 != 0 {
+        if bitboard & Location::H2 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::Two))
                 .is_ok());
         }
-        if bitboard & 0x10000 != 0 {
+        if bitboard & Location::A3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x20000 != 0 {
+        if bitboard & Location::B3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x40000 != 0 {
+        if bitboard & Location::C3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x80000 != 0 {
+        if bitboard & Location::D3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x100000 != 0 {
+        if bitboard & Location::E3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x200000 != 0 {
+        if bitboard & Location::F3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x400000 != 0 {
+        if bitboard & Location::G3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x800000 != 0 {
+        if bitboard & Location::H3 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::Three))
                 .is_ok());
         }
-        if bitboard & 0x1000000 != 0 {
+        if bitboard & Location::A4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x2000000 != 0 {
+        if bitboard & Location::B4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x4000000 != 0 {
+        if bitboard & Location::C4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x8000000 != 0 {
+        if bitboard & Location::D4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x10000000 != 0 {
+        if bitboard & Location::E4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x20000000 != 0 {
+        if bitboard & Location::F4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x40000000 != 0 {
+        if bitboard & Location::G4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x80000000 != 0 {
+        if bitboard & Location::H4 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::Four))
                 .is_ok());
         }
-        if bitboard & 0x100000000 != 0 {
+        if bitboard & Location::A5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x200000000 != 0 {
+        if bitboard & Location::B5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x400000000 != 0 {
+        if bitboard & Location::C5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x800000000 != 0 {
+        if bitboard & Location::D5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x1000000000 != 0 {
+        if bitboard & Location::E5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x2000000000 != 0 {
+        if bitboard & Location::F5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x4000000000 != 0 {
+        if bitboard & Location::G5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x8000000000 != 0 {
+        if bitboard & Location::H5 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::Five))
                 .is_ok());
         }
-        if bitboard & 0x10000000000 != 0 {
+        if bitboard & Location::A6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x20000000000 != 0 {
+        if bitboard & Location::B6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x40000000000 != 0 {
+        if bitboard & Location::C6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x80000000000 != 0 {
+        if bitboard & Location::D6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x100000000000 != 0 {
+        if bitboard & Location::E6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x200000000000 != 0 {
+        if bitboard & Location::F6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x400000000000 != 0 {
+        if bitboard & Location::G6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x800000000000 != 0 {
+        if bitboard & Location::H6 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::Six))
                 .is_ok());
         }
-        if bitboard & 0x1000000000000 != 0 {
+        if bitboard & Location::A7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x2000000000000 != 0 {
+        if bitboard & Location::B7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x4000000000000 != 0 {
+        if bitboard & Location::C7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x8000000000000 != 0 {
+        if bitboard & Location::D7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x10000000000000 != 0 {
+        if bitboard & Location::E7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x20000000000000 != 0 {
+        if bitboard & Location::F7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x40000000000000 != 0 {
+        if bitboard & Location::G7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x80000000000000 != 0 {
+        if bitboard & Location::H7 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::Seven))
                 .is_ok());
         }
-        if bitboard & 0x100000000000000 != 0 {
+        if bitboard & Location::A8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::a, Rank::Eight))
                 .is_ok());
         }
-        if bitboard & 0x200000000000000 != 0 {
+        if bitboard & Location::B8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::b, Rank::Eight))
                 .is_ok());
         }
-        if bitboard & 0x400000000000000 != 0 {
+        if bitboard & Location::C8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::c, Rank::Eight))
                 .is_ok());
         }
-        if bitboard & 0x800000000000000 != 0 {
+        if bitboard & Location::D8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::d, Rank::Eight))
                 .is_ok());
         }
-        if bitboard & 0x1000000000000000 != 0 {
+        if bitboard & Location::E8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::e, Rank::Eight))
                 .is_ok());
         }
-        if bitboard & 0x2000000000000000 != 0 {
+        if bitboard & Location::F8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::f, Rank::Eight))
                 .is_ok());
         }
-        if bitboard & 0x4000000000000000 != 0 {
+        if bitboard & Location::G8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::g, Rank::Eight))
                 .is_ok());
         }
-        if bitboard & 0x8000000000000000 != 0 {
+        if bitboard & Location::H8 != 0 {
             assert!(arr_deque
                 .push_back(Location::new(File::h, Rank::Eight))
                 .is_ok());
