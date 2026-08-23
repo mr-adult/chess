@@ -409,39 +409,54 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             }
         }
 
-        let castle_rank = match self.player {
-            Player::White => Rank::One,
-            Player::Black => Rank::Eight,
-        };
-
         if !self.checked_castle_queenside {
             self.checked_castle_queenside = true;
 
             if self.board.player_can_castle_queenside(&self.player) {
-                let any_pieces_in_way = || {
-                    [File::b, File::c, File::d]
-                        .into_iter()
-                        .map(|file| Location::new(file, castle_rank))
-                        .map(|loc| loc.as_u64())
-                        .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard))
+                let any_pieces_in_way = match self.player {
+                    Player::White => self
+                        .board
+                        .mailbox
+                        .intersects_with_u64(Location::B1 | Location::C1 | Location::D1),
+                    Player::Black => self
+                        .board
+                        .mailbox
+                        .intersects_with_u64(Location::B8 | Location::C8 | Location::D8),
                 };
 
-                let any_checks_in_way = || {
-                    [File::c, File::d]
-                        .into_iter()
-                        .map(|file| Location::new(file, castle_rank))
-                        .any(|loc| Self::is_check(&self.board, self.player, loc.as_u64()))
-                };
-
-                let to_loc = Location::new(File::c, castle_rank);
-                if !any_pieces_in_way()
-                    && !any_checks_in_way()
-                    && !Self::is_check(self.board, self.player, to_loc.as_u64())
-                {
-                    return Some(Move {
-                        from: Location::expect_from(self.king_bitboard.0),
-                        to: to_loc,
-                    });
+                if !any_pieces_in_way {
+                    match self.player {
+                        Player::White => {
+                            let any_checks_in_way = Self::simd_is_check(
+                                self.board,
+                                self.player,
+                                u64x4::from_array([Location::C1, Location::D1, 0, 0]),
+                            )
+                            .reduce_or()
+                                != 0;
+                            if !any_checks_in_way {
+                                return Some(Move {
+                                    from: Location::expect_from(self.king_bitboard.0),
+                                    to: Location::new(File::c, Rank::One),
+                                });
+                            }
+                        }
+                        Player::Black => {
+                            let any_checks_in_way = Self::simd_is_check(
+                                self.board,
+                                self.player,
+                                u64x4::from_array([Location::C8, Location::D8, 0, 0]),
+                            )
+                            .reduce_or()
+                                != 0;
+                            if !any_checks_in_way {
+                                return Some(Move {
+                                    from: Location::expect_from(self.king_bitboard.0),
+                                    to: Location::new(File::c, Rank::Eight),
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -450,27 +465,50 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
             self.checked_castle_kingside = true;
 
             if self.board.player_can_castle_kingside(&self.player) {
-                let any_pieces_in_way = [File::f, File::g]
-                    .into_iter()
-                    .map(|file| Location::new(file, castle_rank))
-                    .map(|loc| loc.as_u64())
-                    .any(|bitboard| self.board.mailbox.intersects_with_u64(bitboard));
+                let any_pieces_in_way = match self.player {
+                    Player::White => self
+                        .board
+                        .mailbox
+                        .intersects_with_u64(Location::F1 | Location::G1),
+                    Player::Black => self
+                        .board
+                        .mailbox
+                        .intersects_with_u64(Location::F8 | Location::G8),
+                };
 
-                let any_checks_in_way = [File::f, File::g]
-                    .into_iter()
-                    .map(|file| Location::new(file, castle_rank))
-                    .any(|loc| Self::is_check(&self.board, self.player, loc.as_u64()));
-
-                let to_loc = Location::new(File::g, castle_rank);
-
-                if !any_pieces_in_way
-                    && !any_checks_in_way
-                    && !Self::is_check(self.board, self.player, to_loc.as_u64())
-                {
-                    return Some(Move {
-                        from: Location::expect_from(self.king_bitboard.0),
-                        to: to_loc,
-                    });
+                if !any_pieces_in_way {
+                    match self.player {
+                        Player::White => {
+                            let any_checks_in_way = Self::simd_is_check(
+                                self.board,
+                                self.player,
+                                u64x4::from_array([Location::F1, Location::G1, 0, 0]),
+                            )
+                            .reduce_or()
+                                != 0;
+                            if !any_checks_in_way {
+                                return Some(Move {
+                                    from: Location::expect_from(self.king_bitboard.0),
+                                    to: Location::new(File::g, Rank::One),
+                                });
+                            }
+                        }
+                        Player::Black => {
+                            let any_checks_in_way = Self::simd_is_check(
+                                self.board,
+                                self.player,
+                                u64x4::from_array([Location::F8, Location::G8, 0, 0]),
+                            )
+                            .reduce_or()
+                                != 0;
+                            if !any_checks_in_way {
+                                return Some(Move {
+                                    from: Location::expect_from(self.king_bitboard.0),
+                                    to: Location::new(File::g, Rank::Eight),
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
