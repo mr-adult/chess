@@ -53,6 +53,168 @@ impl<'board> LegalKingMovesIterator<'board> {
         }
     }
 
+    pub(crate) fn simd_is_check(board: &Board, player: Player, king_positions: u64x4) -> u64x4 {
+        let player_index = player.as_index();
+        let other_player = player.other_player();
+        let other_player_index = other_player.as_index();
+
+        let friendlies = board.pawns[player_index].0
+            | board.knights[player_index].0
+            | board.bishops[player_index].0
+            | board.rooks[player_index].0
+            | board.queens[player_index].0;
+
+        let enemy_king_pawns_knights = board.kings[other_player_index].0
+            | board.pawns[other_player_index].0
+            | board.knights[other_player_index].0;
+
+        let bitwise_not_friendlies = !friendlies;
+
+        let candidate_pawns = match other_player {
+            Player::White => {
+                BitBoard::simd_down_left(king_positions) | BitBoard::simd_down_right(king_positions)
+            }
+            Player::Black => {
+                BitBoard::simd_up_left(king_positions) | BitBoard::simd_up_right(king_positions)
+            }
+        };
+
+        let pawns_result = u64x4::splat(board.pawns[other_player_index].0) & candidate_pawns;
+
+        let verticals = BitBoard::simd_up(BitBoard::simd_up(king_positions))
+            | BitBoard::simd_down(BitBoard::simd_down(king_positions));
+
+        let horizontals = BitBoard::simd_left(BitBoard::simd_left(king_positions))
+            | BitBoard::simd_right(BitBoard::simd_right(king_positions));
+
+        let knight_mask = BitBoard::simd_left(verticals)
+            | BitBoard::simd_right(verticals)
+            | BitBoard::simd_up(horizontals)
+            | BitBoard::simd_down(horizontals);
+
+        // Check for knight captures.
+        let knights_result = knight_mask & u64x4::splat(board.knights[other_player_index].0);
+
+        let left_shifters = [
+            BitBoard::UP_LEFT_DIR_LEFT_SHIFT_OFFSET as u64,
+            BitBoard::UP_RIGHT_DIR_LEFT_SHIFT_OFFSET as u64,
+        ]
+        .map(u64x4::splat);
+        let right_shifters = [
+            BitBoard::DOWN_LEFT_DIR_RIGHT_SHIFT_OFFSET as u64,
+            BitBoard::DOWN_RIGHT_DIR_RIGHT_SHIFT_OFFSET as u64,
+        ]
+        .map(u64x4::splat);
+        let bitwise_not_friendlies_splat = u64x2::splat(bitwise_not_friendlies);
+        let enemy_non_bishop_likes =
+            !(enemy_king_pawns_knights | board.rooks[other_player_index].0);
+        let left_shift_masks = [
+            !File::h_bit_filter()
+                & !Rank::one_bit_filter()
+                & bitwise_not_friendlies
+                & enemy_non_bishop_likes,
+            !File::a_bit_filter()
+                & !Rank::one_bit_filter()
+                & bitwise_not_friendlies
+                & enemy_non_bishop_likes,
+        ]
+        .map(u64x4::splat);
+        let right_shift_masks = [
+            !File::h_bit_filter()
+                & !Rank::eight_bit_filter()
+                & bitwise_not_friendlies
+                & enemy_non_bishop_likes,
+            !File::a_bit_filter()
+                & !Rank::eight_bit_filter()
+                & bitwise_not_friendlies
+                & enemy_non_bishop_likes,
+        ]
+        .map(u64x4::splat);
+
+        let mut left_shift_aggregator_1 = king_positions.clone();
+        let mut left_shift_aggregator_2 = king_positions.clone();
+        let mut right_shift_aggregator_1 = king_positions.clone();
+        let mut right_shift_aggregator_2 = king_positions.clone();
+        for _ in 0..7 {
+            left_shift_aggregator_1 = left_shift_aggregator_1
+                | ((left_shift_aggregator_1 << left_shifters[0]) & left_shift_masks[0]);
+            left_shift_aggregator_2 = left_shift_aggregator_2
+                | ((left_shift_aggregator_2 << left_shifters[1]) & left_shift_masks[1]);
+            right_shift_aggregator_1 = right_shift_aggregator_1
+                | ((right_shift_aggregator_1 >> right_shifters[0]) & right_shift_masks[0]);
+            right_shift_aggregator_2 = right_shift_aggregator_2
+                | ((right_shift_aggregator_2 >> right_shifters[1]) & right_shift_masks[1]);
+        }
+
+        let bishop_mask = (left_shift_aggregator_1
+            | left_shift_aggregator_2
+            | right_shift_aggregator_1
+            | right_shift_aggregator_2)
+            & !(king_positions.clone());
+
+        let enemy_bishop_likes =
+            u64x4::splat(board.bishops[other_player_index].0 | board.queens[other_player_index].0);
+        let bishop_result = bishop_mask & enemy_bishop_likes;
+
+        let left_shifters = u64x2::from_array([
+            BitBoard::RIGHT_DIR_LEFT_SHIFT_OFFSET as u64,
+            BitBoard::UP_DIR_LEFT_SHIFT_OFFSET as u64,
+        ]);
+        let right_shifters = u64x2::from_array([
+            BitBoard::LEFT_DIR_RIGHT_SHIFT_OFFSET as u64,
+            BitBoard::DOWN_DIR_RIGHT_SHIFT_OFFSET as u64,
+        ]);
+        let enemy_non_rook_likes =
+            u64x2::splat(!(enemy_king_pawns_knights | board.bishops[other_player_index].0));
+        let left_mask = (u64x2::from_array([!File::a_bit_filter(), !Rank::one_bit_filter()])
+            & bitwise_not_friendlies_splat
+            & enemy_non_rook_likes)
+            .to_array()
+            .map(u64x4::splat);
+        let right_mask = (u64x2::from_array([!File::h_bit_filter(), !Rank::eight_bit_filter()])
+            & bitwise_not_friendlies_splat
+            & enemy_non_rook_likes)
+            .to_array()
+            .map(u64x4::splat);
+
+        let mut left_shift_aggregator_1 = king_positions.clone();
+        let mut left_shift_aggregator_2 = king_positions.clone();
+        let mut right_shift_aggregator_1 = king_positions.clone();
+        let mut right_shift_aggregator_2 = king_positions.clone();
+        for _ in 0..7 {
+            left_shift_aggregator_1 = left_shift_aggregator_1
+                | ((left_shift_aggregator_1 << left_shifters[0]) & left_mask[0]);
+            left_shift_aggregator_2 = left_shift_aggregator_2
+                | ((left_shift_aggregator_2 << left_shifters[1]) & left_mask[1]);
+            right_shift_aggregator_1 = right_shift_aggregator_1
+                | ((right_shift_aggregator_1 >> right_shifters[0]) & right_mask[0]);
+            right_shift_aggregator_2 = right_shift_aggregator_2
+                | ((right_shift_aggregator_2 >> right_shifters[1]) & right_mask[1]);
+        }
+
+        let rook_mask = (left_shift_aggregator_1
+            | left_shift_aggregator_2
+            | right_shift_aggregator_1
+            | right_shift_aggregator_2)
+            & !(king_positions.clone());
+
+        let enemy_rook_likes =
+            board.rooks[other_player_index].0 | board.queens[other_player_index].0;
+        let rook_result = rook_mask & u64x4::splat(enemy_rook_likes);
+
+        let king_mask = BitBoard::simd_up(king_positions)
+            | BitBoard::simd_left(king_positions)
+            | BitBoard::simd_down(king_positions)
+            | BitBoard::simd_right(king_positions)
+            | BitBoard::simd_up_left(king_positions)
+            | BitBoard::simd_up_right(king_positions)
+            | BitBoard::simd_down_left(king_positions)
+            | BitBoard::simd_down_right(king_positions);
+        let king_result = king_mask & u64x4::splat(board.kings[other_player_index].0);
+
+        return pawns_result | knights_result | bishop_result | rook_result | king_result;
+    }
+
     pub(crate) fn is_check(board: &Board, player: Player, king_position: u64) -> bool {
         let player_index = player.as_index();
         let other_player = player.other_player();
@@ -210,18 +372,23 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
                 continue;
             }
 
-            for king_move in king_move_set.as_array() {
-                if *king_move == 0 {
+            let king_moves = king_move_set.to_array();
+            let is_check =
+                LegalKingMovesIterator::simd_is_check(self.board, self.player, king_move_set)
+                    .to_array();
+            for i in 0..king_moves.len() {
+                if king_moves[i] == 0 {
                     continue;
                 }
 
-                if LegalKingMovesIterator::is_check(self.board, self.player, *king_move) {
+                // Non-zero denotes it was a check.
+                if is_check[i] != 0 {
                     continue;
                 }
 
                 self.queued
-                    .push_back(*king_move)
-                    .expect("Failed to push to queue.");
+                    .push_back(king_moves[i])
+                    .expect("Failed to push to the queue.");
             }
 
             if let Some(queued) = self.queued.pop_front() {
