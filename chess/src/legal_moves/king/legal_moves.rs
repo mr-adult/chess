@@ -1,41 +1,53 @@
-use std::array::IntoIter;
+use std::{
+    array::IntoIter,
+    simd::{num::SimdUint, u64x2, u64x4},
+    str::FromStr,
+};
 
+use arr_deque::ArrDeque;
 use chess_common::{File, Location, Player, Rank};
 
 use crate::{bitboard::BitBoard, Board, Move};
-
-use super::captures_at_location::LegalCapturesAtLocationIterator;
 
 pub(crate) struct LegalKingMovesIterator<'board> {
     board: &'board Board,
     player: Player,
     king_bitboard: BitBoard,
-    moves: IntoIter<BitBoard, 8>,
+    moves: IntoIter<u64x4, 2>,
+    queued: ArrDeque<u64, 4>,
     checked_castle_queenside: bool,
     checked_castle_kingside: bool,
-    friendly_pieces: BitBoard,
 }
 
 impl<'board> LegalKingMovesIterator<'board> {
     pub(crate) fn new(board: &'board Board, player: Player) -> Self {
         let player_index = player.as_index();
         let king_bitboard = board.kings[player_index].clone();
+
+        let friendly_pieces = board.create_mailbox_for_player(player);
+        let friendly_pieces_mask = u64x4::splat(!friendly_pieces.0);
+
+        let king_moves = [
+            u64x4::from_array([
+                BitBoard::up_u64(king_bitboard.0),
+                BitBoard::left_u64(king_bitboard.0),
+                BitBoard::down_u64(king_bitboard.0),
+                BitBoard::right_u64(king_bitboard.0),
+            ]) & friendly_pieces_mask,
+            u64x4::from_array([
+                BitBoard::up_right_u64(king_bitboard.0),
+                BitBoard::up_left_u64(king_bitboard.0),
+                BitBoard::down_right_u64(king_bitboard.0),
+                BitBoard::down_left_u64(king_bitboard.0),
+            ]) & friendly_pieces_mask,
+        ];
+
         Self {
             board,
             player,
-            moves: [
-                king_bitboard.up(),
-                king_bitboard.up_right(),
-                king_bitboard.right(),
-                king_bitboard.down_right(),
-                king_bitboard.down(),
-                king_bitboard.down_left(),
-                king_bitboard.left(),
-                king_bitboard.up_left(),
-            ]
-            .into_iter(),
-            king_bitboard: king_bitboard,
-            friendly_pieces: board.create_mailbox_for_player(player),
+            moves: king_moves.into_iter(),
+            queued: ArrDeque::new(),
+            king_bitboard,
             checked_castle_kingside: false,
             checked_castle_queenside: false,
         }
@@ -184,25 +196,40 @@ impl<'board> Iterator for LegalKingMovesIterator<'board> {
     fn next(&mut self) -> Option<Self::Item> {
         self.board.assert_board_integrity();
 
-        let king_bitboard = self.king_bitboard.clone();
+        let king_bitboard = &self.king_bitboard;
 
-        while let Some(king_move) = self.moves.next() {
-            if king_move.0 == 0 {
-                continue;
-            }
-
-            if king_move.intersects_with(&self.friendly_pieces) {
-                continue;
-            }
-
-            if LegalKingMovesIterator::is_check(self.board, self.player, king_move.0) {
-                continue;
-            }
-
+        if let Some(queued) = self.queued.pop_front() {
             return Some(Move {
                 from: Location::expect_from(king_bitboard.0),
-                to: Location::expect_from(king_move.0),
+                to: Location::expect_from(queued),
             });
+        }
+
+        while let Some(king_move_set) = self.moves.next() {
+            if king_move_set.reduce_or() == 0 {
+                continue;
+            }
+
+            for king_move in king_move_set.as_array() {
+                if *king_move == 0 {
+                    continue;
+                }
+
+                if LegalKingMovesIterator::is_check(self.board, self.player, *king_move) {
+                    continue;
+                }
+
+                self.queued
+                    .push_back(*king_move)
+                    .expect("Failed to push to queue.");
+            }
+
+            if let Some(queued) = self.queued.pop_front() {
+                return Some(Move {
+                    from: Location::expect_from(king_bitboard.0),
+                    to: Location::expect_from(queued),
+                });
+            }
         }
 
         if self.checked_castle_queenside && self.checked_castle_kingside {
