@@ -1,4 +1,3 @@
-mod captures_at_location;
 mod check_blocking_squares;
 mod king_protecting_pieces;
 mod legal_moves;

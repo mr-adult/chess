@@ -43,25 +43,138 @@ impl<'board> LegalKingMovesIterator<'board> {
 
     pub(crate) fn is_check(board: &Board, player: Player, king_position: u64) -> bool {
         let player_index = player.as_index();
-        let mut iterator = LegalCapturesAtLocationIterator::new_with_mailbox(
-            &board,
-            player.other_player(),
-            king_position,
-            // omit the king from the mailbox so we don't allow a move away from the checking piece back into check
-            board.pawns[player_index].0
-                | board.knights[player_index].0
-                | board.bishops[player_index].0
-                | board.rooks[player_index].0
-                | board.queens[player_index].0
-                | board
-                    .create_mailbox_for_player(
-                        Player::try_from(player_index)
-                            .expect("Player to never fail to map")
-                            .other_player(),
-                    )
-                    .0,
-        );
-        iterator.next().is_some()
+        let other_player = player.other_player();
+        let other_player_index = other_player.as_index();
+
+        let friendlies = board.pawns[player_index].0
+            | board.knights[player_index].0
+            | board.bishops[player_index].0
+            | board.rooks[player_index].0
+            | board.queens[player_index].0;
+
+        let enemy_king_pawns_knights = board.kings[other_player_index].0
+            | board.pawns[other_player_index].0
+            | board.knights[other_player_index].0;
+
+        let bitwise_not_friendlies = !friendlies;
+
+        let candidate_pawns = match other_player {
+            Player::White => {
+                BitBoard::down_left_u64(king_position) | BitBoard::down_right_u64(king_position)
+            }
+            Player::Black => {
+                BitBoard::up_left_u64(king_position) | BitBoard::up_right_u64(king_position)
+            }
+        };
+
+        if (board.pawns[other_player_index].0 & candidate_pawns) != 0 {
+            return true;
+        }
+
+        let verticals = u64x2::from_array([
+            BitBoard::up_u64(BitBoard::up_u64(king_position)),
+            BitBoard::down_u64(BitBoard::down_u64(king_position)),
+        ]);
+        let horizontals = u64x2::from_array([
+            BitBoard::left_u64(BitBoard::left_u64(king_position)),
+            BitBoard::right_u64(BitBoard::right_u64(king_position)),
+        ]);
+
+        let knight_mask = (BitBoard::simd_left(verticals)
+            | BitBoard::simd_right(verticals)
+            | BitBoard::simd_up(horizontals)
+            | BitBoard::simd_down(horizontals))
+        .reduce_or();
+
+        // Check for knight captures.
+        if (knight_mask & board.knights[other_player_index].0) != 0 {
+            return true;
+        }
+
+        let left_shifters = u64x2::from_array([
+            BitBoard::UP_LEFT_DIR_LEFT_SHIFT_OFFSET as u64,
+            BitBoard::UP_RIGHT_DIR_LEFT_SHIFT_OFFSET as u64,
+        ]);
+        let right_shifters = u64x2::from_array([
+            BitBoard::DOWN_LEFT_DIR_RIGHT_SHIFT_OFFSET as u64,
+            BitBoard::DOWN_RIGHT_DIR_RIGHT_SHIFT_OFFSET as u64,
+        ]);
+        let mut left_shift_masks = u64x2::from_array([
+            !File::h_bit_filter() & !Rank::one_bit_filter(),
+            !File::a_bit_filter() & !Rank::one_bit_filter(),
+        ]);
+        let mut right_shift_masks = u64x2::from_array([
+            !File::h_bit_filter() & !Rank::eight_bit_filter(),
+            !File::a_bit_filter() & !Rank::eight_bit_filter(),
+        ]);
+        let bitwise_not_friendlies_splat = u64x2::splat(bitwise_not_friendlies);
+        let enemy_non_bishop_likes =
+            u64x2::splat(!(enemy_king_pawns_knights | board.rooks[other_player_index].0));
+        left_shift_masks = left_shift_masks & bitwise_not_friendlies_splat & enemy_non_bishop_likes;
+        right_shift_masks =
+            right_shift_masks & bitwise_not_friendlies_splat & enemy_non_bishop_likes;
+
+        let king_splat_2 = u64x2::splat(king_position);
+        let mut left_shift_aggregator = king_splat_2.clone();
+        let mut right_shift_aggregator = king_splat_2.clone();
+        for _ in 0..7 {
+            left_shift_aggregator = left_shift_aggregator
+                | ((left_shift_aggregator << left_shifters) & left_shift_masks);
+            right_shift_aggregator = right_shift_aggregator
+                | ((right_shift_aggregator >> right_shifters) & right_shift_masks);
+        }
+
+        let bishop_mask =
+            (left_shift_aggregator | right_shift_aggregator).reduce_or() & !king_position;
+        let enemy_bishop_likes =
+            board.bishops[other_player_index].0 | board.queens[other_player_index].0;
+        if (bishop_mask & enemy_bishop_likes) != 0 {
+            return true;
+        }
+
+        let left_shifters = u64x2::from_array([
+            BitBoard::RIGHT_DIR_LEFT_SHIFT_OFFSET as u64,
+            BitBoard::UP_DIR_LEFT_SHIFT_OFFSET as u64,
+        ]);
+        let right_shifters = u64x2::from_array([
+            BitBoard::LEFT_DIR_RIGHT_SHIFT_OFFSET as u64,
+            BitBoard::DOWN_DIR_RIGHT_SHIFT_OFFSET as u64,
+        ]);
+        let enemy_non_rook_likes =
+            u64x2::splat(!(enemy_king_pawns_knights | board.bishops[other_player_index].0));
+        let left_mask = u64x2::from_array([!File::a_bit_filter(), !Rank::one_bit_filter()])
+            & bitwise_not_friendlies_splat
+            & enemy_non_rook_likes;
+        let right_mask = u64x2::from_array([!File::h_bit_filter(), !Rank::eight_bit_filter()])
+            & bitwise_not_friendlies_splat
+            & enemy_non_rook_likes;
+
+        let mut left_shift_aggregator = king_splat_2.clone();
+        let mut right_shift_aggregator = king_splat_2.clone();
+        for _ in 0..7 {
+            left_shift_aggregator =
+                left_shift_aggregator | ((left_shift_aggregator << left_shifters) & left_mask);
+            right_shift_aggregator =
+                right_shift_aggregator | ((right_shift_aggregator >> right_shifters) & right_mask);
+        }
+
+        let rook_mask =
+            (left_shift_aggregator | right_shift_aggregator).reduce_or() & !king_position;
+        let enemy_rook_likes =
+            board.rooks[other_player_index].0 | board.queens[other_player_index].0;
+        if (rook_mask & enemy_rook_likes) != 0 {
+            return true;
+        }
+
+        let king_mask = BitBoard::up_u64(king_position)
+            | BitBoard::left_u64(king_position)
+            | BitBoard::down_u64(king_position)
+            | BitBoard::right_u64(king_position)
+            | BitBoard::up_left_u64(king_position)
+            | BitBoard::up_right_u64(king_position)
+            | BitBoard::down_left_u64(king_position)
+            | BitBoard::down_right_u64(king_position);
+        (king_mask & board.kings[other_player_index].0) != 0
     }
 }
 
