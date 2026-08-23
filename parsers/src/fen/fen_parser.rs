@@ -415,13 +415,13 @@ impl ToString for BoardLayout {
         }
 
         fen.push(b' ');
-        for ch in self.half_move_counter().to_string().chars() {
-            fen.push(ch as u8);
+        for ch in self.half_move_counter().to_string().bytes() {
+            fen.push(ch);
         }
 
         fen.push(b' ');
-        for ch in self.full_move_counter().to_string().chars() {
-            fen.push(ch as u8);
+        for ch in self.full_move_counter().to_string().bytes() {
+            fen.push(ch);
         }
 
         unsafe { String::from_utf8_unchecked(fen) }
